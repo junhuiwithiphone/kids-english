@@ -1,0 +1,107 @@
+/* ═══ 全局 reset + 儿童安全基线 ═══ */
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overscroll-behavior: none;
+}
+
+body {
+  font-family: var(--font-kid);
+  background: var(--c-bg);
+  color: var(--c-ink);
+  /* 防选中、防双击缩放（儿童乱按） */
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+}
+
+#app {
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+button {
+  font-family: inherit;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: inherit;
+  touch-action: manipulation;
+}
+
+/* 大按钮基类：≥96px 触控 */
+.big-btn {
+  min-width: var(--touch-min);
+  min-height: var(--touch-min);
+  border-radius: var(--r-md);
+  font-size: var(--f-body);
+  font-weight: 700;
+  background: var(--c-card);
+  box-shadow: var(--shadow-card);
+  transition: transform var(--t-fast) ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.big-btn:active {
+  transform: scale(0.94);
+}
+
+/* 家长灰色小字提示条 */
+.parent-hint {
+  font-family: var(--font-parent);
+  font-size: var(--f-parent);
+  color: var(--c-ink-soft);
+  line-height: 1.6;
+}
+
+/* 英文单词大字 */
+.word-big {
+  font-size: var(--f-word);
+  font-weight: 800;
+  letter-spacing: 1px;
+  text-transform: lowercase;
+}
+
+/* 页面外壳：统一最大宽度居中 */
+.page {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 16px 20px 40px;
+}
+
+/* 滚动条美化（桌面） */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: #e8d9c5;
+  border-radius: 8px;
+}
+
+/* 打印：只打印标记了 .print-area 的区域（涂色页/奖状） */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .print-area,
+  .print-area * {
+    visibility: visible;
+  }
+  .print-area {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+}

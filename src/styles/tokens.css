@@ -1,0 +1,69 @@
+/* ═══════════════════════════════════════════════════════
+   绮梦英语 · 设计令牌（4岁儿童 UI 规范，全站强制）
+   ═══════════════════════════════════════════════════════ */
+:root {
+  /* ── 级别主题色 ── */
+  --c-l1: #ffb300; /* L1 ⭐ 橙黄 */
+  --c-l2: #43c463; /* L2 🌙 草绿 */
+  --c-l3: #2fa8e0; /* L3 ☀️ 天蓝 */
+  --level-color: var(--c-l1); /* 当前级别色，由视图覆盖 */
+
+  /* ── 基础色板 ── */
+  --c-bg: #fff9ec; /* 奶油白底 */
+  --c-card: #ffffff;
+  --c-ink: #5d4037; /* 暖棕主文字 */
+  --c-ink-soft: #a1887f; /* 灰色家长提示 */
+  --c-star: #ffc400;
+  --c-correct: #66bb6a;
+  --c-danger: #ef9a9a;
+  --c-overlay: rgba(93, 64, 55, 0.35);
+
+  /* ── 圆角（≥24px） ── */
+  --r-sm: 16px;
+  --r-md: 24px;
+  --r-lg: 32px;
+  --r-full: 9999px;
+
+  /* ── 触控尺寸（≥96px） ── */
+  --touch-min: 96px;
+  --touch-gap: 16px;
+
+  /* ── 字号 ── */
+  --f-word: 44px; /* 英文单词超大圆体 */
+  --f-title: 30px;
+  --f-body: 20px;
+  --f-parent: 14px; /* 家长灰色小字 */
+
+  /* ── 字体：圆体族回退，不引外部字体保证离线 ── */
+  --font-kid: 'Comic Sans MS', 'Yuanti SC', 'YouYuan', '幼圆', 'Microsoft YaHei UI',
+    system-ui, -apple-system, sans-serif;
+  --font-parent: 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+
+  /* ── 动效时长 ── */
+  --t-fast: 0.15s;
+  --t-mid: 0.3s;
+  --t-slow: 0.6s;
+
+  /* ── 阴影 ── */
+  --shadow-card: 0 6px 0 rgba(93, 64, 55, 0.12), 0 10px 24px rgba(93, 64, 55, 0.1);
+  --shadow-pop: 0 10px 0 rgba(93, 64, 55, 0.16), 0 16px 32px rgba(93, 64, 55, 0.16);
+
+  /* ── 掌握度色阶（mastery 0-5） ── */
+  --m0: #e0e0e0;
+  --m1: #fff3c4;
+  --m2: #ffe082;
+  --m3: #ffca28;
+  --m4: #ffb300;
+  --m5: #ff8f00;
+}
+
+/* 级别主题色切换（视图根元素加 .level-L2 / .level-L3） */
+.level-L1 {
+  --level-color: var(--c-l1);
+}
+.level-L2 {
+  --level-color: var(--c-l2);
+}
+.level-L3 {
+  --level-color: var(--c-l3);
+}

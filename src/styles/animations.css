@@ -1,0 +1,187 @@
+/* ═══ 全站动效（纯 CSS transform/opacity，无第三方库） ═══ */
+
+/* 弹跳出现 */
+@keyframes pop-in {
+  0% {
+    transform: scale(0.4);
+    opacity: 0;
+  }
+  70% {
+    transform: scale(1.08);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+.anim-pop {
+  animation: pop-in 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+/* 可玩节点：轻微跳动召唤 */
+@keyframes bounce-soft {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+.anim-bounce {
+  animation: bounce-soft 1.2s ease-in-out infinite;
+}
+
+/* 星星获得：飞起旋转放大 */
+@keyframes star-fly {
+  0% {
+    transform: translateY(0) scale(0.5) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-120px) scale(1.6) rotate(30deg);
+    opacity: 0;
+  }
+}
+.anim-star-fly {
+  animation: star-fly 0.8s ease-out both;
+}
+
+/* StarMeter 收星弹跳 */
+@keyframes meter-pop {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.35);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.anim-meter-pop {
+  animation: meter-pop 0.4s ease both;
+}
+
+/* 贴纸盖章：scale 1.6 → 1 + rotate */
+@keyframes stamp {
+  0% {
+    transform: scale(1.8) rotate(-18deg);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(0.95) rotate(4deg);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+  }
+}
+.anim-stamp {
+  animation: stamp 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+/* 答错轻晃（无错误音，仅视觉） */
+@keyframes wiggle {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-8px);
+  }
+  75% {
+    transform: translateX(8px);
+  }
+}
+.anim-wiggle {
+  animation: wiggle 0.35s ease both;
+}
+
+/* 正确项发光引导 */
+@keyframes glow-hint {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(102, 187, 106, 0.9);
+  }
+  50% {
+    box-shadow: 0 0 0 16px rgba(102, 187, 106, 0.25);
+  }
+}
+.anim-glow {
+  animation: glow-hint 1s ease-in-out infinite;
+  border-radius: var(--r-lg);
+}
+
+/* 麦克风呼吸（跟读独占焦点） */
+@keyframes breathe {
+  0%,
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(239, 83, 80, 0.5);
+  }
+  50% {
+    transform: scale(1.06);
+    box-shadow: 0 0 0 22px rgba(239, 83, 80, 0);
+  }
+}
+.anim-breathe {
+  animation: breathe 1.4s ease-in-out infinite;
+}
+
+/* 淡入淡出（环节过场 ≤1.5s 可跳过） */
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.anim-fade-up {
+  animation: fade-up 0.4s ease both;
+}
+
+/* 彩带掉落（跟读闯关全过） */
+@keyframes confetti-fall {
+  0% {
+    transform: translateY(-40px) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(110vh) rotate(720deg);
+    opacity: 0.6;
+  }
+}
+.confetti-piece {
+  position: fixed;
+  top: 0;
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  animation: confetti-fall 2.4s linear both;
+  z-index: 90;
+  pointer-events: none;
+}
+
+/* Vue 路由过渡 */
+.route-fade-enter-active,
+.route-fade-leave-active {
+  transition: opacity 0.25s ease;
+}
+.route-fade-enter-from,
+.route-fade-leave-to {
+  opacity: 0;
+}
+
+/* 尊重系统减弱动态偏好 */
+@media (prefers-reduced-motion: reduce) {
+  .anim-bounce,
+  .anim-breathe,
+  .anim-glow {
+    animation: none;
+  }
+}
