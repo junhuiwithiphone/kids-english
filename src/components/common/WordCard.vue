@@ -33,8 +33,9 @@ const showZhText = computed(() =>
 
 function tap() {
   if (!props.silent) {
-    playClick()
+    // 先朗读，再给极轻点击音，避免「只有叮一声」盖过英文
     void speakWord(props.word)
+    playClick()
     bumping.value = true
     clearTimeout(timer)
     timer = window.setTimeout(() => (bumping.value = false), 450)
