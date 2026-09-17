@@ -1,14 +1,15 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onUnmounted, ref } from 'vue'
 import type { Lesson, WrapupSegment } from '@/data/schema'
 import { getWord } from '@/data/levels'
 import { stickerMap } from '@/data/rewards'
 import { playReveal, playStar } from '@/composables/useAudioFeedback'
-import { speak, speakWord, stopSpeech, RATE } from '@/composables/useSpeech'
+import { speak, stopSpeech, RATE } from '@/composables/useSpeech'
 import WordCard from '@/components/common/WordCard.vue'
 import BigButton from '@/components/common/BigButton.vue'
 import StarMeter from '@/components/common/StarMeter.vue'
 
+/* 总结：不自动播。点词卡复习，点按钮揭贴纸 / 听告别语 */
 const props = defineProps<{
   segment: WrapupSegment
   lesson: Lesson
@@ -20,42 +21,34 @@ const revealed = ref(false)
 const finished = ref(false)
 const sticker = computed(() => stickerMap.get(props.segment.stickerId))
 const words = computed(() => props.segment.reviewWordIds.map(getWord))
-
-onMounted(async () => {
-  for (const w of words.value) {
-    if (finished.value) return
-    await speakWord(w)
-  }
-  if (!finished.value) await reveal()
-})
+const activeBye = ref<number | null>(null)
 
 onUnmounted(() => {
   finished.value = true
   stopSpeech()
 })
 
-async function reveal() {
+function reveal() {
   if (revealed.value) return
   revealed.value = true
   stars.value = props.segment.maxStars
   playReveal()
   playStar()
-  if (props.segment.goodbyeLines?.length) {
-    for (const l of props.segment.goodbyeLines) {
-      if (finished.value) return
-      await speak(l.text, { rate: RATE.normal })
-    }
-  }
+}
+
+async function tapBye(i: number) {
+  if (finished.value) return
+  if (!revealed.value) reveal()
+  activeBye.value = i
+  const line = props.segment.goodbyeLines?.[i]
+  if (line) await speak(line.text, { rate: RATE.normal })
 }
 
 function finish() {
   if (finished.value) return
   finished.value = true
   stopSpeech()
-  if (!revealed.value) {
-    revealed.value = true
-    stars.value = props.segment.maxStars
-  }
+  if (!revealed.value) reveal()
   emit('done', stars.value || props.segment.maxStars)
 }
 </script>
@@ -63,9 +56,13 @@ function finish() {
 <template>
   <div class="seg wrapup anim-fade-up">
     <h2>🌟 Great Job!</h2>
+    <p class="parent-hint tip">点词卡复习发音，不会自动连播</p>
+
     <div class="cards">
       <WordCard v-for="w in words" :key="w.id" :word="w" size="md" />
     </div>
+
+    <BigButton v-if="!revealed" color="--level-color" @click="reveal">✨ 揭晓贴纸</BigButton>
 
     <div v-if="revealed && sticker" class="sticker anim-stamp">
       <span class="emoji">{{ sticker.emoji }}</span>
@@ -73,11 +70,18 @@ function finish() {
       <span class="parent-hint">{{ sticker.name.zh }}</span>
     </div>
 
-    <div v-if="segment.goodbyeLines" class="bye">
-      <p v-for="(l, i) in segment.goodbyeLines" :key="i">
-        <span class="en">{{ l.text }}</span>
+    <div v-if="revealed && segment.goodbyeLines?.length" class="bye">
+      <button
+        v-for="(l, i) in segment.goodbyeLines"
+        :key="i"
+        type="button"
+        class="bye-btn"
+        :class="{ on: activeBye === i }"
+        @click="tapBye(i)"
+      >
+        <span class="en">🔊 {{ l.text }}</span>
         <span class="parent-hint">{{ l.zh }}</span>
-      </p>
+      </button>
     </div>
 
     <StarMeter :earned="stars" :max="segment.maxStars" />
@@ -96,6 +100,9 @@ function finish() {
 h2 {
   margin: 0;
   font-size: 32px;
+}
+.tip {
+  margin: -8px 0 0;
 }
 .cards {
   display: flex;
@@ -121,11 +128,23 @@ h2 {
 }
 .bye {
   max-width: 520px;
-}
-.bye p {
-  margin: 0 0 8px;
+  width: 100%;
   display: flex;
   flex-direction: column;
+  gap: 8px;
+}
+.bye-btn {
+  text-align: left;
+  background: var(--c-card);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-card);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.bye-btn.on {
+  outline: 3px solid var(--level-color);
 }
 .en {
   font-weight: 700;

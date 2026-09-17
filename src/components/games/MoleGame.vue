@@ -22,10 +22,17 @@ const locked = ref(false)
 let alive = true
 let tick: number | undefined
 
+const started = ref(false)
+
 onMounted(() => {
   pool.value = props.config.wordIds.map(getWord)
-  void nextRound()
 })
+
+function start() {
+  if (started.value) return
+  started.value = true
+  void nextRound()
+}
 
 onUnmounted(() => {
   alive = false
@@ -90,8 +97,11 @@ async function hit(i: number) {
 <template>
   <div class="game mole">
     <p class="prompt">🐹 Whack!</p>
-    <p v-if="target" class="target parent-hint">找：{{ target.en }}</p>
-    <button class="replay big-btn" type="button" @click="target && speakWord(target)">🔊</button>
+    <button v-if="!started" class="replay big-btn" type="button" @click="start">🔊 开始听</button>
+    <template v-else>
+      <p v-if="target" class="target parent-hint">找：{{ target.en }}</p>
+      <button class="replay big-btn" type="button" @click="target && speakWord(target)">🔊</button>
+    </template>
 
     <div class="field">
       <button

@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router'
 import type { Segment } from '@/data/schema'
 import { getLesson, getUnit, levelOfLesson } from '@/data/levels'
 import { useProgressStore } from '@/stores/progress'
-import { playClick } from '@/composables/useAudioFeedback'
+import { playClick, playWrong } from '@/composables/useAudioFeedback'
 import { stopAllPlayback } from '@/composables/stopAllPlayback'
 import { resolve } from '@/i18n'
 import StarMeter from '@/components/common/StarMeter.vue'
@@ -15,6 +15,10 @@ import SongPanel from '@/components/lesson/SongPanel.vue'
 import HandsOnPanel from '@/components/lesson/HandsOnPanel.vue'
 import WrapupPanel from '@/components/lesson/WrapupPanel.vue'
 
+/* 断点续玩：回到离开时的环节，不重播前面环节音频。
+   回退：点顶部圆点可回到已到达的环节；不可跳到未到达的环节。
+   音频：各面板内点哪听哪，进入页面不自动播。 */
+
 const props = defineProps<{ lessonId: string }>()
 const router = useRouter()
 const progress = useProgressStore()
@@ -24,19 +28,27 @@ const unit = computed(() => (lesson.value ? getUnit(lesson.value.unitId) : undef
 const level = computed(() => levelOfLesson(props.lessonId))
 
 const segIdx = ref(0)
+/** 本课本次学习已到达的最远环节（含回退后仍可再进更远已到达处） */
+const maxReached = ref(0)
 const segmentStars = ref<number[]>([0, 0, 0, 0, 0])
 const celebrating = ref(false)
+/** 强制重挂载面板，避免回退时残留内部状态 */
+const panelEpoch = ref(0)
 const totalEarned = computed(() => segmentStars.value.reduce((a, b) => a + b, 0))
 
 const segment = computed<Segment | undefined>(() => lesson.value?.segments[segIdx.value])
 
 const labels = ['👋', '📖', '🎵', '✋', '🌟']
+const labelNames = ['开场', '单词', '儿歌', '动手', '总结']
 
 onMounted(() => {
   if (!lesson.value) return
-  // 断点续玩
+  stopAllPlayback()
+  // 断点续玩：只回到该环节，静默等待点击
   if (progress.resume?.lessonId === props.lessonId) {
-    segIdx.value = Math.min(progress.resume.segmentIndex, lesson.value.segments.length - 1)
+    const i = Math.min(progress.resume.segmentIndex, lesson.value.segments.length - 1)
+    segIdx.value = i
+    maxReached.value = i
   }
   progress.saveResume(props.lessonId, segIdx.value)
 })
@@ -45,6 +57,7 @@ onUnmounted(() => stopAllPlayback())
 
 watch(segIdx, (i) => {
   stopAllPlayback()
+  if (i > maxReached.value) maxReached.value = i
   if (lesson.value) progress.saveResume(props.lessonId, i)
 })
 
@@ -58,6 +71,22 @@ function onSegDone(stars: number) {
     return
   }
   segIdx.value++
+  panelEpoch.value++
+}
+
+/** 回退 / 跳到已到达的环节 */
+function jumpTo(i: number) {
+  if (!lesson.value) return
+  if (i < 0 || i > maxReached.value || i >= lesson.value.segments.length) {
+    playWrong()
+    return
+  }
+  if (i === segIdx.value && !celebrating.value) return
+  playClick()
+  stopAllPlayback()
+  celebrating.value = false
+  segIdx.value = i
+  panelEpoch.value++
 }
 
 function goShowcase() {
@@ -69,6 +98,8 @@ function goShowcase() {
 function exit() {
   playClick()
   stopAllPlayback()
+  // 退出时保存当前环节，下次 Continue 从这里静默进入
+  if (lesson.value) progress.saveResume(props.lessonId, segIdx.value)
   if (unit.value) router.push({ name: 'unit', params: { unitId: unit.value.id } })
   else router.push({ name: 'home' })
 }
@@ -94,40 +125,51 @@ function goRewards() {
         <h1>Day {{ lesson.day }} · {{ resolve(lesson.title, 'en') }}</h1>
         <p class="parent-hint">{{ resolve(lesson.title, 'zh') }} · 约 {{ lesson.estimatedMinutes }} 分钟</p>
       </div>
-      <div class="steps" aria-hidden="true">
-        <span
+      <div class="steps" role="navigation" aria-label="课程环节">
+        <button
           v-for="(lab, i) in labels"
           :key="i"
+          type="button"
           class="dot"
-          :class="{ on: i === segIdx, done: i < segIdx }"
-        >{{ lab }}</span>
+          :class="{
+            on: i === segIdx && !celebrating,
+            done: i < segIdx || (celebrating && i <= maxReached),
+            locked: i > maxReached,
+          }"
+          :aria-label="`${labelNames[i]}${i > maxReached ? '（未解锁）' : ''}`"
+          :disabled="i > maxReached"
+          @click="jumpTo(i)"
+        >
+          {{ lab }}
+        </button>
       </div>
     </header>
+    <p class="parent-hint nav-hint">点上方圆点可回到已学过的环节；当前页点内容才播放对应音频</p>
 
     <div v-if="!celebrating" class="body">
       <WarmupPanel
         v-if="segment?.type === 'warmup'"
-        :key="`w-${segIdx}`"
+        :key="`w-${segIdx}-${panelEpoch}`"
         :segment="segment"
         :lesson="lesson"
         @done="onSegDone"
       />
       <WordsPanel
         v-else-if="segment?.type === 'words'"
-        :key="`words-${segIdx}`"
+        :key="`words-${segIdx}-${panelEpoch}`"
         :segment="segment"
         :lesson="lesson"
         @done="onSegDone"
       />
       <SongPanel
         v-else-if="segment?.type === 'song'"
-        :key="`song-${segIdx}`"
+        :key="`song-${segIdx}-${panelEpoch}`"
         :segment="segment"
         @done="onSegDone"
       />
       <HandsOnPanel
         v-else-if="segment?.type === 'handsOn'"
-        :key="`hands-${segIdx}`"
+        :key="`hands-${segIdx}-${panelEpoch}`"
         :segment="segment"
         :lesson="lesson"
         @done="onSegDone"
@@ -135,7 +177,7 @@ function goRewards() {
       />
       <WrapupPanel
         v-else-if="segment?.type === 'wrapup'"
-        :key="`wrap-${segIdx}`"
+        :key="`wrap-${segIdx}-${panelEpoch}`"
         :segment="segment"
         :lesson="lesson"
         @done="onSegDone"
@@ -163,7 +205,7 @@ function goRewards() {
 .lesson {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
   min-height: 100dvh;
 }
 .bar {
@@ -199,16 +241,26 @@ function goRewards() {
   justify-content: center;
   font-size: 18px;
   opacity: 0.45;
+  cursor: pointer;
+  border: none;
+  padding: 0;
 }
 .dot.on {
   opacity: 1;
   background: var(--level-color);
   box-shadow: var(--shadow-card);
-  transform: scale(1.08);
 }
 .dot.done {
   opacity: 0.85;
   background: #fff3c4;
+}
+.dot.locked {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.nav-hint {
+  margin: 0;
+  text-align: center;
 }
 .body {
   flex: 1;

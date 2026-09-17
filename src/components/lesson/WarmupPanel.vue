@@ -1,13 +1,14 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from 'vue'
+import { onUnmounted, ref } from 'vue'
 import type { Lesson, WarmupSegment } from '@/data/schema'
 import { getSong, getWord } from '@/data/levels'
 import { playStar, playWin } from '@/composables/useAudioFeedback'
-import { speak, speakSequence, speakWord, stopSpeech, RATE } from '@/composables/useSpeech'
+import { speak, speakWord, stopSpeech, RATE } from '@/composables/useSpeech'
 import WordCard from '@/components/common/WordCard.vue'
 import BigButton from '@/components/common/BigButton.vue'
 import StarMeter from '@/components/common/StarMeter.vue'
 
+/* 开场：不自动播。点问候语 / 词卡才发音，点继续进入下一环节 */
 const props = defineProps<{
   segment: WarmupSegment
   lesson: Lesson
@@ -15,54 +16,35 @@ const props = defineProps<{
 const emit = defineEmits<{ (e: 'done', stars: number): void }>()
 
 const stars = ref(0)
-const step = ref(0) // 0 greet 1 anchors 2 must-win 3 done
 const finished = ref(false)
+const activeLine = ref<number | null>(null)
 
-onMounted(() => {
-  void run()
-})
+onUnmounted(() => stopSpeech())
 
-onUnmounted(() => {
-  finished.value = true
-  stopSpeech()
-})
-
-async function run() {
-  await speakSequence(
-    props.segment.greetingLines.map((l) => ({ text: l.text, rate: RATE.normal })),
-    400,
-  )
+async function tapGreeting(i: number) {
   if (finished.value) return
-  step.value = 1
+  activeLine.value = i
+  const line = props.segment.greetingLines[i]
+  if (line) await speak(line.text, { rate: RATE.normal })
+}
 
-  if (props.segment.helloSongId) {
-    const song = getSong(props.segment.helloSongId)
-    await speak(song.title.en, { rate: RATE.chant })
+async function playHelloSong() {
+  if (finished.value || !props.segment.helloSongId) return
+  const song = getSong(props.segment.helloSongId)
+  await speak(song.title.en, { rate: RATE.chant })
+  for (const line of song.lines.slice(0, 3)) {
     if (finished.value) return
-    for (const line of song.lines.slice(0, 3)) {
-      if (finished.value) return
-      await speak(line.text, { rate: song.baseRate })
-    }
+    await speak(line.text, { rate: song.baseRate })
   }
-  if (finished.value) return
+}
 
-  if (props.segment.anchorWordIds?.length) {
-    for (const id of props.segment.anchorWordIds) {
-      if (finished.value) return
-      await speakWord(getWord(id))
-    }
+async function announceMustWin() {
+  if (finished.value || !props.segment.announceMustWin) return
+  await speak("Today's magic words!", { rate: RATE.normal })
+  for (const id of props.lesson.mustWinWords) {
+    if (finished.value) return
+    await speakWord(getWord(id))
   }
-  step.value = 2
-
-  if (props.segment.announceMustWin && props.lesson.mustWinWords.length) {
-    await speak("Today's magic words!", { rate: RATE.normal })
-    for (const id of props.lesson.mustWinWords) {
-      if (finished.value) return
-      await speakWord(getWord(id))
-    }
-  }
-
-  if (!finished.value) finish()
 }
 
 function finish() {
@@ -72,23 +54,31 @@ function finish() {
   stars.value = props.segment.maxStars
   playStar()
   playWin()
-  step.value = 3
   emit('done', stars.value)
-}
-
-function skip() {
-  finish()
 }
 </script>
 
 <template>
   <div class="seg warmup anim-fade-up">
     <h2>👋 Hello!</h2>
+    <p class="parent-hint tip">点下面的句子听英文，不会自动连播</p>
+
     <div class="lines">
-      <p v-for="(l, i) in segment.greetingLines" :key="i" class="line">
-        <span class="en">{{ l.text }}</span>
+      <button
+        v-for="(l, i) in segment.greetingLines"
+        :key="i"
+        type="button"
+        class="line-btn"
+        :class="{ on: activeLine === i }"
+        @click="tapGreeting(i)"
+      >
+        <span class="en">🔊 {{ l.text }}</span>
         <span class="parent-hint">{{ l.zh }}</span>
-      </p>
+      </button>
+    </div>
+
+    <div v-if="segment.helloSongId" class="row">
+      <BigButton @click="playHelloSong">🎵 Hello Song</BigButton>
     </div>
 
     <div v-if="segment.anchorWordIds?.length" class="cards">
@@ -101,7 +91,7 @@ function skip() {
     </div>
 
     <div v-if="segment.announceMustWin" class="must-win">
-      <p class="label">✨ Magic words</p>
+      <p class="label">✨ Magic words <span class="parent-hint">点词卡听发音</span></p>
       <div class="cards">
         <WordCard
           v-for="id in lesson.mustWinWords"
@@ -110,10 +100,11 @@ function skip() {
           size="md"
         />
       </div>
+      <BigButton @click="announceMustWin">🔊 听今日必胜词</BigButton>
     </div>
 
     <StarMeter :earned="stars" :max="segment.maxStars" />
-    <BigButton @click="skip">{{ step < 3 ? '跳过开场 ▶' : '继续' }}</BigButton>
+    <BigButton color="--level-color" @click="finish">继续 ▶</BigButton>
   </div>
 </template>
 
@@ -129,20 +120,31 @@ h2 {
   margin: 0;
   font-size: 32px;
 }
+.tip {
+  margin: -8px 0 0;
+}
 .lines {
   display: flex;
   flex-direction: column;
   gap: 10px;
   max-width: 560px;
+  width: 100%;
 }
-.line {
-  margin: 0;
+.line-btn {
+  text-align: left;
+  background: var(--c-card);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-card);
+  padding: 14px 16px;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
+}
+.line-btn.on {
+  outline: 3px solid var(--level-color);
 }
 .en {
-  font-size: 22px;
+  font-size: 20px;
   font-weight: 700;
 }
 .cards {
@@ -155,5 +157,11 @@ h2 {
   font-weight: 800;
   font-size: 20px;
   margin: 0 0 8px;
+}
+.row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: center;
 }
 </style>

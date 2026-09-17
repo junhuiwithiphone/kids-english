@@ -26,7 +26,7 @@ const title = computed(() => props.config.title?.en ?? 'Simon Says!')
 
 onMounted(() => {
   queue.value = shuffle(props.config.wordIds.map(getWord))
-  void announce()
+  // 不自动播：点「听指令」再开始
 })
 
 onUnmounted(() => {
@@ -84,6 +84,7 @@ function skipRest() {
 <template>
   <div class="game tpr">
     <p class="prompt">🤸 {{ title }}</p>
+    <BigButton @click="announce">🔊 听指令</BigButton>
     <div v-if="current" class="stage">
       <WordCard :word="current" size="lg" :show-zh="true" />
       <p v-if="current.tprAction" class="parent-hint action">👉 {{ current.tprAction }}</p>

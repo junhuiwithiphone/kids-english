@@ -17,12 +17,15 @@ const emit = defineEmits<{
 }>()
 
 const stars = ref(0)
-const stepIdx = ref(0)
+/** -1 = 尚未点选任一步；只有点击才高亮并播该步音频 */
+const stepIdx = ref(-1)
 const finished = ref(false)
 
 onUnmounted(() => stopSpeech())
 
 async function readStep(i: number) {
+  if (finished.value) return
+  stopSpeech()
   stepIdx.value = i
   const s = props.segment.activity.steps[i]
   if (s) await speak(s.text)
@@ -55,10 +58,11 @@ function goShowcase() {
     <p class="parent-hint title-zh">{{ segment.activity.title.zh }}</p>
     <p class="guide parent-hint">{{ segment.activity.parentGuideZh }}</p>
 
+    <p class="parent-hint tip">点某一步，只听这一句英文</p>
     <ol class="steps">
       <li v-for="(s, i) in segment.activity.steps" :key="i" :class="{ on: i === stepIdx }">
         <button type="button" class="step-btn" @click="readStep(i)">
-          <span class="en">{{ s.text }}</span>
+          <span class="en">🔊 {{ s.text }}</span>
           <span class="parent-hint">{{ s.zh }}</span>
         </button>
       </li>
@@ -94,6 +98,10 @@ h2 {
 }
 .title-zh {
   margin: -6px 0 0;
+}
+.tip {
+  margin: 0;
+  text-align: center;
 }
 .guide {
   max-width: 560px;

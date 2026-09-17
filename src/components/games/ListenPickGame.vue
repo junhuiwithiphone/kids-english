@@ -43,7 +43,7 @@ onMounted(() => {
     const distractors = pickDistractors(target, pool.length ? pool : targets, nOpts - 1)
     return { target, options: shuffle([target, ...distractors]) }
   })
-  void prompt()
+  // 不自动播：先点 Listen 再听目标词
 })
 
 onUnmounted(() => {
@@ -98,7 +98,7 @@ function wait(ms: number) {
 <template>
   <div class="game listen-pick">
     <p class="prompt">👂 Listen!</p>
-    <button class="replay big-btn" type="button" @click="prompt">🔊 Again</button>
+    <button class="replay big-btn" type="button" @click="prompt">🔊 Listen</button>
 
     <div v-if="current" class="options" :class="feedback">
       <WordCard
