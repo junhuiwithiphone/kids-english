@@ -44,7 +44,7 @@ export const l1Scripts: LessonScript[] = [
     sections: [
       { ...SEC.warm, content: '玩 Hide and seek：你藏玩偶让她找，找到后说 "You found it!"' },
       { ...SEC.input, content: '动作词：jump, run, stop, sit down。Freeze Dance——音乐响就 jump/run，音乐停喊 "Stop!" 她不动。' },
-      { ...SEC.song, content: 'Walking Walking（Super Simple Songs 节奏）。' },
+      { ...SEC.song, content: 'The Wheels on the Bus（动作：转圈、按喇叭）。' },
       { ...SEC.hands, content: '用黏土搓"小人"，每搓一个部位你念一次（只念，不考）。' },
       { ...SEC.wrap, content: '抱着她转一圈说 "You can jump! Amazing!"' },
     ],
@@ -66,7 +66,7 @@ export const l1Scripts: LessonScript[] = [
     sections: [
       { ...SEC.warm, content: '"老师说"大合集：head/eyes/ears/jump/run/stop/sit 连发指令。' },
       { ...SEC.input, content: '不教新词，全部复习但换场景——爬行垫障碍赛道："Jump over the pillow. Stop at the chair. Sit down."' },
-      { ...SEC.song, content: '本周三首歌串烧（Head Shoulders / Walking Walking / If You\'re Happy 各唱1遍）。' },
+      { ...SEC.song, content: '本周三首歌串烧（Head Shoulders / Wheels on the Bus / If You\'re Happy 各唱1遍）。' },
       { ...SEC.hands, content: '绘本 From Head to Toe（Eric Carle）：你学动物，她学你。' },
       { ...SEC.wrap, content: '给她一个"本周小冠军"手环（彩纸做），用英文夸3句。' },
     ],

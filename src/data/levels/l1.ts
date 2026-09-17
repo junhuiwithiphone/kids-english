@@ -142,7 +142,7 @@ export const levelL1: Level = {
               ],
               [w('jump'), w('stop')],
             ),
-            song(s('walking-walking'), '站起来！走一走→跳→跑→停，全身动起来'),
+            song(s('wheels-on-bus'), '站起来！轮子转圈→按喇叭→摇摆，全身动起来'),
             handsOn({
               kind: 'craft',
               title: { en: 'Clay Little Person', zh: '黏土搓小人' },

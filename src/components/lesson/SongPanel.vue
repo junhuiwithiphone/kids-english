@@ -4,6 +4,7 @@ import type { SongSegment } from '@/data/schema'
 import { getSong } from '@/data/levels'
 import { playBeat, playStar, playWin, playClick } from '@/composables/useAudioFeedback'
 import { speak, stopSpeech, RATE } from '@/composables/useSpeech'
+import { playSongAudio, stopSongAudio } from '@/composables/useSongAudio'
 import BigButton from '@/components/common/BigButton.vue'
 import StarMeter from '@/components/common/StarMeter.vue'
 
@@ -15,11 +16,13 @@ const lineIdx = ref(-1)
 const playing = ref(false)
 const stars = ref(0)
 const finished = ref(false)
+const mode = ref<'audio' | 'tts' | null>(null)
 let abort = false
 
 onUnmounted(() => {
   abort = true
   stopSpeech()
+  stopSongAudio()
 })
 
 async function playAll() {
@@ -27,6 +30,28 @@ async function playAll() {
   abort = false
   playing.value = true
   playClick()
+
+  // 优先真实歌曲
+  if (song.value.audioUrl) {
+    mode.value = 'audio'
+    lineIdx.value = 0
+    const ok = await playSongAudio(song.value)
+    if (abort) {
+      playing.value = false
+      return
+    }
+    if (ok) {
+      playing.value = false
+      if (!finished.value) {
+        stars.value = props.segment.maxStars
+        playStar()
+      }
+      return
+    }
+    // 音频失败 → TTS 降级
+  }
+
+  mode.value = 'tts'
   await speak(song.value.title.en, { rate: RATE.normal })
   for (let i = 0; i < song.value.lines.length; i++) {
     if (abort) break
@@ -49,12 +74,14 @@ async function playAll() {
 function stop() {
   abort = true
   stopSpeech()
+  stopSongAudio()
   playing.value = false
 }
 
 function finish() {
   if (finished.value) return
   finished.value = true
+  stop()
   if (stars.value === 0) stars.value = props.segment.maxStars
   playWin()
   emit('done', stars.value)
@@ -66,13 +93,16 @@ function finish() {
     <h2>🎵 {{ song.title.en }}</h2>
     <p class="movement">{{ segment.movement.en }}</p>
     <p class="parent-hint">{{ segment.movement.zh }}</p>
+    <p v-if="song.audioUrl" class="parent-hint">
+      {{ mode === 'audio' && playing ? '正在播放歌曲音频…' : '有真实歌曲，点 Sing 播放' }}
+    </p>
 
     <div class="lyrics">
       <p
         v-for="(line, i) in song.lines"
         :key="i"
         class="lyric"
-        :class="{ on: i === lineIdx }"
+        :class="{ on: i === lineIdx || (mode === 'audio' && playing) }"
       >
         <span class="en">{{ line.text }}</span>
         <span v-if="line.action" class="action">{{ line.action }}</span>

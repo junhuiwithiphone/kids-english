@@ -56,10 +56,12 @@ export interface Song {
   /** traditional=公版传统儿歌 / original=自编 chant */
   source: 'traditional' | 'original'
   lines: SongLine[]
-  /** TTS 节奏语速 0.7~1.0 */
+  /** TTS 节奏语速 0.7~1.0（无 audioUrl 时用） */
   baseRate: number
   /** chant=行间隔打拍点；slow=慢速逐行 */
   beatMode?: 'chant' | 'slow'
+  /** 真实歌曲音频（public/songs/…），有则优先播放，不再念标题 */
+  audioUrl?: string
 }
 
 /* ─────────────── 游戏（数据驱动） ─────────────── */

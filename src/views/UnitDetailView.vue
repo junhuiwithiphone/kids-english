@@ -6,6 +6,7 @@ import { getLevel, getSong, getUnit, getWord } from '@/data/levels'
 import { useProgressStore } from '@/stores/progress'
 import { playClick, playWrong } from '@/composables/useAudioFeedback'
 import { speak, RATE } from '@/composables/useSpeech'
+import { useSongAudio } from '@/composables/useSongAudio'
 import { resolve } from '@/i18n'
 import WordCard from '@/components/common/WordCard.vue'
 import StarMeter from '@/components/common/StarMeter.vue'
@@ -15,9 +16,11 @@ import StarMeter from '@/components/common/StarMeter.vue'
 const props = defineProps<{ unitId: string }>()
 const router = useRouter()
 const progress = useProgressStore()
+const { songPlayingId, toggleSongAudio, stopSongAudio } = useSongAudio()
 
 const unit = computed(() => getUnit(props.unitId))
 const level = computed(() => (unit.value ? getLevel(unit.value.levelId) : undefined))
+const songHint = ref('')
 
 /** 本单元全部新词（按课序去重） */
 const words = computed<Word[]>(() => {
@@ -29,7 +32,7 @@ const words = computed<Word[]>(() => {
   return ids.map((id) => getWord(id))
 })
 
-/** 本单元出现的儿歌（song 环节 + 开场/告别歌去重） */
+/** 本单元出现的儿歌（song 环节去重） */
 const songs = computed<Song[]>(() => {
   if (!unit.value) return []
   const ids = new Set<string>()
@@ -55,20 +58,33 @@ function tapLesson(lessonId: string) {
     setTimeout(() => (shaking.value = null), 550)
     return
   }
+  stopSongAudio()
   playClick()
   router.push({ name: 'lesson', params: { lessonId } })
 }
 
-/** 儿歌试听：标题 + 前两句（完整逐行播放器在课程内） */
+/** 儿歌试听：优先真实 MP3；无音源才降级念歌词 */
 async function previewSong(song: Song) {
-  playClick()
-  await speak(song.title.en, { rate: RATE.normal })
-  for (const line of song.lines.slice(0, 2)) {
+  songHint.value = ''
+  const state = await toggleSongAudio(song)
+  if (state === 'playing') {
+    songHint.value = `正在播放：${song.title.en}`
+    return
+  }
+  if (state === 'stopped') {
+    songHint.value = ''
+    return
+  }
+  // missing → TTS 降级（念歌词，不当成「念标题」）
+  songHint.value = '暂无歌曲文件，改为朗读歌词…'
+  await speak(song.lines[0]?.text ?? song.title.en, { rate: song.baseRate ?? RATE.normal })
+  for (const line of song.lines.slice(1, 3)) {
     await speak(line.text, { rate: song.baseRate })
   }
 }
 
 function back() {
+  stopSongAudio()
   playClick()
   if (level.value) router.push({ name: 'level', params: { levelId: level.value.id } })
   else router.push({ name: 'home' })
@@ -101,18 +117,21 @@ function back() {
 
     <!-- 儿歌试听 -->
     <section v-if="songs.length" class="block">
-      <h2>🎵 <span class="en-h">Songs</span> <span class="parent-hint">上课时会带着宝宝唱跳</span></h2>
+      <h2>🎵 <span class="en-h">Songs</span> <span class="parent-hint">点按钮播放英文歌曲（再点可停止）</span></h2>
       <div class="song-row">
         <button
           v-for="song in songs"
           :key="song.id"
           class="song-chip big-btn"
+          :class="{ playing: songPlayingId === song.id }"
           type="button"
           @click="previewSong(song)"
         >
-          <span aria-hidden="true">▶</span> {{ song.title.en }}
+          <span aria-hidden="true">{{ songPlayingId === song.id ? '⏹' : '▶' }}</span>
+          {{ song.title.en }}
         </button>
       </div>
+      <p v-if="songHint" class="parent-hint song-hint">{{ songHint }}</p>
     </section>
 
     <!-- 课列表 -->
@@ -208,6 +227,14 @@ function back() {
   min-height: 64px;
   border-radius: var(--r-full);
   color: var(--level-color);
+}
+.song-chip.playing {
+  background: var(--level-color);
+  color: #fff;
+  animation: breathe 1.6s ease-in-out infinite;
+}
+.song-hint {
+  margin: 10px 0 0;
 }
 
 .lesson-list {

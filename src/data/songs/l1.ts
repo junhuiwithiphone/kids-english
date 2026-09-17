@@ -26,6 +26,7 @@ export const l1Songs: Song[] = [
     source: 'traditional',
     baseRate: 0.85,
     beatMode: 'chant',
+    audioUrl: 'songs/head-shoulders.mp3',
     lines: [
       { text: 'Head, shoulders, knees and toes,', zh: '头、肩膀、膝盖、脚趾', action: '🙌 依次摸头→肩→膝→脚趾', repeat: 2 },
       { text: 'Eyes and ears and mouth and nose,', zh: '眼睛、耳朵、嘴巴、鼻子', action: '👀 依次指五官' },
@@ -33,16 +34,18 @@ export const l1Songs: Song[] = [
     ],
   },
   {
-    id: 'l1-s-walking-walking',
-    title: { en: 'Walking Walking', zh: '走走走' },
+    /** 原 Walking Walking 无可用音源，换成同等难度动作歌 The Wheels on the Bus */
+    id: 'l1-s-wheels-on-bus',
+    title: { en: 'The Wheels on the Bus', zh: '巴士上的轮子' },
     source: 'traditional',
     baseRate: 0.95,
     beatMode: 'chant',
+    audioUrl: 'songs/wheels-on-the-bus.mp3',
     lines: [
-      { text: 'Walking, walking. Walking, walking.', zh: '走呀走', action: '🚶 原地踏步走', repeat: 1 },
-      { text: 'Hop, hop, hop! Hop, hop, hop!', zh: '跳跳跳！', action: '🦘 单脚跳跳' },
-      { text: 'Running, running, running.', zh: '跑呀跑', action: '🏃 原地小跑' },
-      { text: 'Now let us stop. Now let us stop.', zh: '现在停下来', action: '✋ 立刻定住！' },
+      { text: 'The wheels on the bus go round and round,', zh: '巴士轮子转呀转', action: '🔄 双手转圈', repeat: 1 },
+      { text: 'Round and round, round and round.', zh: '转呀转，转呀转', action: '🔄 继续转' },
+      { text: 'The wheels on the bus go round and round,', zh: '巴士轮子转呀转', action: '🔄 转圈' },
+      { text: 'All through the town!', zh: '开过整个小镇！', action: '🚌 挥手前进' },
     ],
   },
   {
@@ -51,6 +54,7 @@ export const l1Songs: Song[] = [
     source: 'traditional',
     baseRate: 0.9,
     beatMode: 'chant',
+    audioUrl: 'songs/if-youre-happy.mp3',
     lines: [
       { text: "If you're happy and you know it, clap your hands!", zh: '如果感到幸福你就拍拍手', action: '👏 拍手两下' },
       { text: "If you're happy and you know it, clap your hands!", zh: '再拍两下', action: '👏 拍手两下' },
@@ -77,6 +81,7 @@ export const l1Songs: Song[] = [
     source: 'traditional',
     baseRate: 0.9,
     beatMode: 'chant',
+    audioUrl: 'songs/old-macdonald.mp3',
     lines: [
       { text: 'Old MacDonald had a farm, E-I-E-I-O!', zh: '王老先生有块地 咿呀咿呀哟', action: '🏡 双手比屋顶' },
       { text: 'And on that farm he had a cow, E-I-E-I-O!', zh: '农场里有一头牛', action: '🐮 学牛叫 Moo~' },
@@ -90,6 +95,7 @@ export const l1Songs: Song[] = [
     source: 'traditional',
     baseRate: 0.9,
     beatMode: 'chant',
+    audioUrl: 'songs/bingo.mp3',
     lines: [
       { text: 'There was a dog, and BINGO was his name-o!', zh: '有一只小狗，它的名字叫宾果', action: '🐶 学小狗喘气' },
       { text: 'B-I-N-G-O! B-I-N-G-O!', zh: '宾——果——', action: '👏 每个字母拍一下手' },
