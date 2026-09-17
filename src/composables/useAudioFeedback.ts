@@ -59,10 +59,9 @@ export function unlockAudio() {
   ac()
 }
 
-/** 点击/触摸反馈 */
+/** 点击/触摸反馈 —— 已关闭（用户只要内容发音，不要每点一下的滴声） */
 export function playClick() {
-  if (!soundOn()) return
-  tone(660, 0, 0.07, 'triangle', 0.1)
+  /* no-op */
 }
 
 /** 答对：C-E-G 上行琶音 +  sparkle */

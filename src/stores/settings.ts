@@ -38,7 +38,7 @@ const defaults = (): SettingsState => ({
   parentPin: '',
   childName: '',
   enforceLevelLock: true,
-  soundOn: true,
+  soundOn: false,
 })
 
 export const useSettingsStore = defineStore('settings', {

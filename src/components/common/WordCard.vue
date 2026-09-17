@@ -2,7 +2,6 @@
 import { computed, ref } from 'vue'
 import type { Word } from '@/data/schema'
 import { speakWord } from '@/composables/useSpeech'
-import { playClick } from '@/composables/useAudioFeedback'
 import { useSettingsStore } from '@/stores/settings'
 import SvgIcon from './SvgIcon.vue'
 
@@ -33,9 +32,8 @@ const showZhText = computed(() =>
 
 function tap() {
   if (!props.silent) {
-    // 先朗读，再给极轻点击音，避免「只有叮一声」盖过英文
+    // 先朗读；点击滴声已关闭，只保留内容发音
     void speakWord(props.word)
-    playClick()
     bumping.value = true
     clearTimeout(timer)
     timer = window.setTimeout(() => (bumping.value = false), 450)

@@ -258,7 +258,7 @@ function back() {
         </p>
         <label class="check">
           <input v-model="settings.soundOn" type="checkbox" />
-          点击音效开（与英文朗读独立）
+          游戏音效（答对/答错等；点击滴声已关闭，不影响英文朗读）
         </label>
         <label class="check">
           <input v-model="settings.enforceLevelLock" type="checkbox" />
