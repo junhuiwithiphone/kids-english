@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import type { GameConfig, Word } from '@/data/schema'
 import { pickDistractors, shuffle, wordsOfLevel } from '@/data/helpers'
 import { getWord, levelOfLesson } from '@/data/levels'
 import { playCorrect, playWrong, playWin } from '@/composables/useAudioFeedback'
-import { speakWord } from '@/composables/useSpeech'
+import { speakWord, stopSpeech } from '@/composables/useSpeech'
 import { useProgressStore } from '@/stores/progress'
 import WordCard from '@/components/common/WordCard.vue'
 
@@ -46,8 +46,13 @@ onMounted(() => {
   void prompt()
 })
 
+onUnmounted(() => {
+  finished.value = true
+  stopSpeech()
+})
+
 async function prompt() {
-  if (!current.value) return
+  if (finished.value || !current.value) return
   await speakWord(current.value.target)
 }
 

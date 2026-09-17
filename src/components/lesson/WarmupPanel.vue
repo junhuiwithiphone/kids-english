@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, onUnmounted, ref } from 'vue'
 import type { Lesson, WarmupSegment } from '@/data/schema'
 import { getSong, getWord } from '@/data/levels'
 import { playStar, playWin } from '@/composables/useAudioFeedback'
-import { speak, speakSequence, speakWord, RATE } from '@/composables/useSpeech'
+import { speak, speakSequence, speakWord, stopSpeech, RATE } from '@/composables/useSpeech'
 import WordCard from '@/components/common/WordCard.vue'
 import BigButton from '@/components/common/BigButton.vue'
 import StarMeter from '@/components/common/StarMeter.vue'
@@ -22,6 +22,11 @@ onMounted(() => {
   void run()
 })
 
+onUnmounted(() => {
+  finished.value = true
+  stopSpeech()
+})
+
 async function run() {
   await speakSequence(
     props.segment.greetingLines.map((l) => ({ text: l.text, rate: RATE.normal })),
@@ -33,7 +38,9 @@ async function run() {
   if (props.segment.helloSongId) {
     const song = getSong(props.segment.helloSongId)
     await speak(song.title.en, { rate: RATE.chant })
+    if (finished.value) return
     for (const line of song.lines.slice(0, 3)) {
+      if (finished.value) return
       await speak(line.text, { rate: song.baseRate })
     }
   }
@@ -41,6 +48,7 @@ async function run() {
 
   if (props.segment.anchorWordIds?.length) {
     for (const id of props.segment.anchorWordIds) {
+      if (finished.value) return
       await speakWord(getWord(id))
     }
   }
@@ -49,16 +57,18 @@ async function run() {
   if (props.segment.announceMustWin && props.lesson.mustWinWords.length) {
     await speak("Today's magic words!", { rate: RATE.normal })
     for (const id of props.lesson.mustWinWords) {
+      if (finished.value) return
       await speakWord(getWord(id))
     }
   }
 
-  finish()
+  if (!finished.value) finish()
 }
 
 function finish() {
   if (finished.value) return
   finished.value = true
+  stopSpeech()
   stars.value = props.segment.maxStars
   playStar()
   playWin()

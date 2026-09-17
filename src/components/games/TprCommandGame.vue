@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import type { GameConfig, Word } from '@/data/schema'
 import { shuffle } from '@/data/helpers'
 import { getWord } from '@/data/levels'
 import { playClick, playCorrect, playWin, playStar } from '@/composables/useAudioFeedback'
-import { speak, speakWord, RATE } from '@/composables/useSpeech'
+import { speak, speakWord, stopSpeech, RATE } from '@/composables/useSpeech'
 import { useProgressStore } from '@/stores/progress'
 import WordCard from '@/components/common/WordCard.vue'
 import BigButton from '@/components/common/BigButton.vue'
@@ -29,13 +29,17 @@ onMounted(() => {
   void announce()
 })
 
+onUnmounted(() => {
+  done.value = true
+  clearTimeout(holdTimer)
+  stopSpeech()
+})
+
 async function announce() {
-  if (!current.value) return
+  if (done.value || !current.value) return
   await speak(title.value, { rate: RATE.normal })
+  if (done.value || !current.value) return
   await speakWord(current.value)
-  if (current.value.tprAction) {
-    // 家长提示不 TTS，界面显示
-  }
 }
 
 function startHold() {

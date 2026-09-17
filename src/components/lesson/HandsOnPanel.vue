@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { onUnmounted, ref } from 'vue'
 import type { HandsOnSegment, Lesson } from '@/data/schema'
 import { playStar, playWin, playClick } from '@/composables/useAudioFeedback'
-import { speak } from '@/composables/useSpeech'
+import { speak, stopSpeech } from '@/composables/useSpeech'
 import SvgIcon from '@/components/common/SvgIcon.vue'
 import BigButton from '@/components/common/BigButton.vue'
 import StarMeter from '@/components/common/StarMeter.vue'
@@ -20,6 +20,8 @@ const stars = ref(0)
 const stepIdx = ref(0)
 const finished = ref(false)
 
+onUnmounted(() => stopSpeech())
+
 async function readStep(i: number) {
   stepIdx.value = i
   const s = props.segment.activity.steps[i]
@@ -34,6 +36,7 @@ function printPage() {
 function confirmDone() {
   if (finished.value) return
   finished.value = true
+  stopSpeech()
   stars.value = props.segment.maxStars
   playStar()
   playWin()

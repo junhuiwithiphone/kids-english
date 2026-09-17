@@ -4,7 +4,7 @@ import type { GameConfig, Word } from '@/data/schema'
 import { shuffle, randInt } from '@/data/helpers'
 import { getWord } from '@/data/levels'
 import { playCorrect, playWrong, playWin, playListenCue } from '@/composables/useAudioFeedback'
-import { speakWord } from '@/composables/useSpeech'
+import { speakWord, stopSpeech } from '@/composables/useSpeech'
 import { useProgressStore } from '@/stores/progress'
 import WordCard from '@/components/common/WordCard.vue'
 
@@ -19,6 +19,7 @@ const target = ref<Word | null>(null)
 const stars = ref(0)
 const round = ref(0)
 const locked = ref(false)
+let alive = true
 let tick: number | undefined
 
 onMounted(() => {
@@ -26,10 +27,15 @@ onMounted(() => {
   void nextRound()
 })
 
-onUnmounted(() => clearInterval(tick))
+onUnmounted(() => {
+  alive = false
+  clearInterval(tick)
+  stopSpeech()
+})
 
 async function nextRound() {
   clearInterval(tick)
+  if (!alive) return
   if (round.value >= props.config.rounds) {
     playWin()
     emit('done', stars.value)
@@ -40,6 +46,7 @@ async function nextRound() {
   locked.value = false
   playListenCue()
   await speakWord(target.value!)
+  if (!alive) return
 
   // 随机冒出
   tick = window.setInterval(() => {

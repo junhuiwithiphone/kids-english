@@ -5,7 +5,7 @@ import type { Segment } from '@/data/schema'
 import { getLesson, getUnit, levelOfLesson } from '@/data/levels'
 import { useProgressStore } from '@/stores/progress'
 import { playClick } from '@/composables/useAudioFeedback'
-import { stopSpeech } from '@/composables/useSpeech'
+import { stopAllPlayback } from '@/composables/stopAllPlayback'
 import { resolve } from '@/i18n'
 import StarMeter from '@/components/common/StarMeter.vue'
 import BigButton from '@/components/common/BigButton.vue'
@@ -41,13 +41,15 @@ onMounted(() => {
   progress.saveResume(props.lessonId, segIdx.value)
 })
 
-onUnmounted(() => stopSpeech())
+onUnmounted(() => stopAllPlayback())
 
 watch(segIdx, (i) => {
+  stopAllPlayback()
   if (lesson.value) progress.saveResume(props.lessonId, i)
 })
 
 function onSegDone(stars: number) {
+  stopAllPlayback()
   segmentStars.value[segIdx.value] = stars
   if (!lesson.value) return
   if (segIdx.value + 1 >= lesson.value.segments.length) {
@@ -60,24 +62,26 @@ function onSegDone(stars: number) {
 
 function goShowcase() {
   playClick()
-  // 先把当前进度存上，展示课完成后再结算也可；这里直接跳展示
+  stopAllPlayback()
   router.push({ name: 'showcase', params: { lessonId: props.lessonId } })
 }
 
 function exit() {
   playClick()
-  stopSpeech()
+  stopAllPlayback()
   if (unit.value) router.push({ name: 'unit', params: { unitId: unit.value.id } })
   else router.push({ name: 'home' })
 }
 
 function goHome() {
   playClick()
+  stopAllPlayback()
   router.push({ name: 'home' })
 }
 
 function goRewards() {
   playClick()
+  stopAllPlayback()
   router.push({ name: 'rewards' })
 }
 </script>

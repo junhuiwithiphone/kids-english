@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import type { Lesson, WordsSegment } from '@/data/schema'
 import { getWord } from '@/data/levels'
 import { playStar, playWin } from '@/composables/useAudioFeedback'
+import { stopSpeech } from '@/composables/useSpeech'
 import WordCard from '@/components/common/WordCard.vue'
 import BigButton from '@/components/common/BigButton.vue'
 import StarMeter from '@/components/common/StarMeter.vue'
@@ -26,6 +27,7 @@ const reviewWords = computed(() => (props.segment.reviewWordIds ?? []).map(getWo
 const currentGame = computed(() => props.segment.games[gameIdx.value])
 
 function startGames() {
+  stopSpeech()
   if (props.segment.games.length) {
     phase.value = 'game'
   } else if (props.segment.readAloud.enabled) {
@@ -36,6 +38,7 @@ function startGames() {
 }
 
 function onGameDone(s: number) {
+  stopSpeech()
   stars.value += s
   if (gameIdx.value + 1 < props.segment.games.length) {
     gameIdx.value++
@@ -49,16 +52,19 @@ function onGameDone(s: number) {
 }
 
 function onReadDone(s: number) {
+  stopSpeech()
   stars.value += s
   finish()
 }
 
 function skipRead() {
+  stopSpeech()
   finish()
 }
 
 function finish() {
   if (phase.value === 'done') return
+  stopSpeech()
   // 保底：至少给 1 星鼓励（若全程跳过游戏）
   if (stars.value === 0) stars.value = Math.min(1, props.segment.maxStars)
   stars.value = Math.min(stars.value, props.segment.maxStars)

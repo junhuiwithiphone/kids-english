@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import type { Lesson, WrapupSegment } from '@/data/schema'
 import { getWord } from '@/data/levels'
 import { stickerMap } from '@/data/rewards'
 import { playReveal, playStar } from '@/composables/useAudioFeedback'
-import { speak, speakWord, RATE } from '@/composables/useSpeech'
+import { speak, speakWord, stopSpeech, RATE } from '@/composables/useSpeech'
 import WordCard from '@/components/common/WordCard.vue'
 import BigButton from '@/components/common/BigButton.vue'
 import StarMeter from '@/components/common/StarMeter.vue'
@@ -22,8 +22,16 @@ const sticker = computed(() => stickerMap.get(props.segment.stickerId))
 const words = computed(() => props.segment.reviewWordIds.map(getWord))
 
 onMounted(async () => {
-  for (const w of words.value) await speakWord(w)
-  await reveal()
+  for (const w of words.value) {
+    if (finished.value) return
+    await speakWord(w)
+  }
+  if (!finished.value) await reveal()
+})
+
+onUnmounted(() => {
+  finished.value = true
+  stopSpeech()
 })
 
 async function reveal() {
@@ -34,6 +42,7 @@ async function reveal() {
   playStar()
   if (props.segment.goodbyeLines?.length) {
     for (const l of props.segment.goodbyeLines) {
+      if (finished.value) return
       await speak(l.text, { rate: RATE.normal })
     }
   }
@@ -42,7 +51,11 @@ async function reveal() {
 function finish() {
   if (finished.value) return
   finished.value = true
-  if (!revealed.value) void reveal()
+  stopSpeech()
+  if (!revealed.value) {
+    revealed.value = true
+    stars.value = props.segment.maxStars
+  }
   emit('done', stars.value || props.segment.maxStars)
 }
 </script>

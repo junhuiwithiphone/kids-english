@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import type { Song, Word } from '@/data/schema'
 import { getLevel, getSong, getUnit, getWord } from '@/data/levels'
@@ -7,6 +7,7 @@ import { useProgressStore } from '@/stores/progress'
 import { playClick, playWrong } from '@/composables/useAudioFeedback'
 import { speak, RATE } from '@/composables/useSpeech'
 import { useSongAudio } from '@/composables/useSongAudio'
+import { stopAllPlayback } from '@/composables/stopAllPlayback'
 import { resolve } from '@/i18n'
 import WordCard from '@/components/common/WordCard.vue'
 import StarMeter from '@/components/common/StarMeter.vue'
@@ -21,6 +22,8 @@ const { songPlayingId, toggleSongAudio, stopSongAudio } = useSongAudio()
 const unit = computed(() => getUnit(props.unitId))
 const level = computed(() => (unit.value ? getLevel(unit.value.levelId) : undefined))
 const songHint = ref('')
+
+onUnmounted(() => stopAllPlayback())
 
 /** 本单元全部新词（按课序去重） */
 const words = computed<Word[]>(() => {

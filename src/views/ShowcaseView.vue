@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { getLesson, getWord, levelOfLesson } from '@/data/levels'
 import { useProgressStore } from '@/stores/progress'
 import { useSettingsStore } from '@/stores/settings'
 import { playCorrect, playReveal, playClick } from '@/composables/useAudioFeedback'
-import { speak } from '@/composables/useSpeech'
+import { speak, stopSpeech } from '@/composables/useSpeech'
 import { resolve } from '@/i18n'
 import BigButton from '@/components/common/BigButton.vue'
 import WordCard from '@/components/common/WordCard.vue'
@@ -26,6 +26,8 @@ const showCert = ref(false)
 const card = computed(() => showcase.value?.cards[idx.value])
 const allDone = computed(() => showcase.value && doneIds.value.size >= showcase.value.cards.length)
 
+onUnmounted(() => stopSpeech())
+
 async function ask() {
   if (!card.value) return
   playClick()
@@ -34,6 +36,7 @@ async function ask() {
 
 function success() {
   if (!card.value) return
+  stopSpeech()
   playCorrect()
   doneIds.value = new Set([...doneIds.value, idx.value])
   if (card.value.hintWordId) progress.markOutput(card.value.hintWordId)
