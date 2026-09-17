@@ -2,7 +2,7 @@
 import { onUnmounted, ref } from 'vue'
 import type { HandsOnSegment, Lesson } from '@/data/schema'
 import { playStar, playWin, playClick } from '@/composables/useAudioFeedback'
-import { speak, stopSpeech } from '@/composables/useSpeech'
+import { speak, stopSpeech, lastSpeakStatus } from '@/composables/useSpeech'
 import SvgIcon from '@/components/common/SvgIcon.vue'
 import BigButton from '@/components/common/BigButton.vue'
 import StarMeter from '@/components/common/StarMeter.vue'
@@ -20,15 +20,33 @@ const stars = ref(0)
 /** -1 = 尚未点选任一步；只有点击才高亮并播该步音频 */
 const stepIdx = ref(-1)
 const finished = ref(false)
+const speaking = ref(false)
+const speakFail = ref(false)
+let speakToken = 0
 
-onUnmounted(() => stopSpeech())
+onUnmounted(() => {
+  speakToken++
+  stopSpeech()
+})
 
 async function readStep(i: number) {
   if (finished.value) return
-  stopSpeech()
-  stepIdx.value = i
   const s = props.segment.activity.steps[i]
-  if (s) await speak(s.text)
+  if (!s?.text) return
+
+  const token = ++speakToken
+  stepIdx.value = i
+  speaking.value = true
+  speakFail.value = false
+
+  // 交给 speak 内部 interrupt，不要先 stopSpeech（会抬 gen 导致竞态静音）
+  await speak(s.text, { interrupt: true, forceAudio: true })
+
+  if (token !== speakToken) return
+  speaking.value = false
+  if (lastSpeakStatus.value?.engine === 'none') {
+    speakFail.value = true
+  }
 }
 
 function printPage() {
@@ -39,6 +57,8 @@ function printPage() {
 function confirmDone() {
   if (finished.value) return
   finished.value = true
+  speakToken++
+  speaking.value = false
   stopSpeech()
   stars.value = props.segment.maxStars
   playStar()
@@ -58,12 +78,20 @@ function goShowcase() {
     <p class="parent-hint title-zh">{{ segment.activity.title.zh }}</p>
     <p class="guide parent-hint">{{ segment.activity.parentGuideZh }}</p>
 
-    <p class="parent-hint tip">点某一步，只听这一句英文</p>
+    <p class="parent-hint tip">点喇叭听这一句英文</p>
+    <p v-if="speakFail" class="parent-hint fail">暂时没声音，请检查网络后重试</p>
     <ol class="steps">
-      <li v-for="(s, i) in segment.activity.steps" :key="i" :class="{ on: i === stepIdx }">
-        <button type="button" class="step-btn" @click="readStep(i)">
-          <span class="en">🔊 {{ s.text }}</span>
-          <span class="parent-hint">{{ s.zh }}</span>
+      <li
+        v-for="(s, i) in segment.activity.steps"
+        :key="i"
+        :class="{ on: i === stepIdx, speaking: i === stepIdx && speaking }"
+      >
+        <button type="button" class="step-btn" :aria-busy="i === stepIdx && speaking" @click="readStep(i)">
+          <span class="horn" aria-hidden="true">{{ i === stepIdx && speaking ? '🔈' : '🔊' }}</span>
+          <span class="texts">
+            <span class="en">{{ s.text }}</span>
+            <span class="parent-hint">{{ s.zh }}</span>
+          </span>
         </button>
       </li>
     </ol>
@@ -103,6 +131,11 @@ h2 {
   margin: 0;
   text-align: center;
 }
+.fail {
+  margin: 0;
+  color: #c62828;
+  font-weight: 700;
+}
 .guide {
   max-width: 560px;
   text-align: center;
@@ -128,11 +161,30 @@ h2 {
   box-shadow: var(--shadow-card);
   padding: 14px 16px;
   display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.horn {
+  flex-shrink: 0;
+  font-size: 28px;
+  line-height: 1.2;
+}
+.texts {
+  display: flex;
   flex-direction: column;
   gap: 4px;
+  min-width: 0;
 }
 .steps li.on .step-btn {
   outline: 3px solid var(--level-color);
+}
+.steps li.speaking .horn {
+  animation: horn-pulse 0.7s ease-in-out infinite;
+}
+@keyframes horn-pulse {
+  50% {
+    transform: scale(1.15);
+  }
 }
 .en {
   font-weight: 700;

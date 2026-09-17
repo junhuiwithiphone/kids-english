@@ -135,11 +135,12 @@ function stopAudio() {
   }
 }
 
-/** 有道词典美音（type=2）；失败再试百度 TTS */
+/** 在线美音：短词走词典，整句再走 TTS；多源兜底 */
 function audioUrls(text: string): string[] {
   const q = encodeURIComponent(text)
   return [
     `https://dict.youdao.com/dictvoice?audio=${q}&type=2`,
+    `https://translate.googleapis.com/translate_tts?ie=UTF-8&client=gtx&tl=en&q=${q}`,
     `https://fanyi.baidu.com/gettts?lan=en&text=${q}&spd=3&source=web`,
   ]
 }
@@ -238,24 +239,30 @@ function speakNative(text: string, opts: SpeakOptions, gen: number): Promise<'ok
   })
 }
 
-/** 朗读：本机 → 在线音频兜底 */
+/** 朗读：本机 → 在线音频兜底（整句默认更信任在线，避免 Windows 静默 TTS） */
 export async function speak(text: string, opts: SpeakOptions = {}): Promise<void> {
   const cleaned = text.trim()
   if (!cleaned) return
+  unlockSpeech()
   const gen = ++speakGen
   stopAudio()
+
+  // 含空格的短语/句子：本机常「有 onstart 却无声」，优先在线
+  const preferAudio = opts.forceAudio || cleaned.includes(' ')
 
   try {
     if (opts.interrupt !== false && speechSupported) {
       speechSynthesis.cancel()
       stopResumeWatch()
-      await delay(60)
+      // cancel 后立刻 speak 会被 Chrome/Edge 吞掉
+      await delay(120)
     }
 
-    if (opts.forceAudio || !speechSupported) {
+    if (preferAudio || !speechSupported) {
       if (gen !== speakGen) return
-      await playAudioFallback(cleaned)
-      return
+      const engine = await playAudioFallback(cleaned)
+      if (engine !== 'none' || preferAudio) return
+      // 在线全失败再试本机
     }
 
     await waitForVoices()
@@ -268,7 +275,7 @@ export async function speak(text: string, opts: SpeakOptions = {}): Promise<void
       return
     }
 
-    await playAudioFallback(cleaned)
+    if (!preferAudio) await playAudioFallback(cleaned)
   } catch (e) {
     lastSpeakStatus.value = {
       text: cleaned,

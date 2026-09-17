@@ -15,9 +15,8 @@ import SongPanel from '@/components/lesson/SongPanel.vue'
 import HandsOnPanel from '@/components/lesson/HandsOnPanel.vue'
 import WrapupPanel from '@/components/lesson/WrapupPanel.vue'
 
-/* 断点续玩：回到离开时的环节，不重播前面环节音频。
-   回退：点顶部圆点可回到已到达的环节；不可跳到未到达的环节。
-   音频：各面板内点哪听哪，进入页面不自动播。 */
+/* 导航：返回 = 本节前一环节；首页 = 离开课程回主页。
+   断点续玩静默进入；音频仅点内容才播。 */
 
 const props = defineProps<{ lessonId: string }>()
 const router = useRouter()
@@ -28,15 +27,14 @@ const unit = computed(() => (lesson.value ? getUnit(lesson.value.unitId) : undef
 const level = computed(() => levelOfLesson(props.lessonId))
 
 const segIdx = ref(0)
-/** 本课本次学习已到达的最远环节（含回退后仍可再进更远已到达处） */
 const maxReached = ref(0)
 const segmentStars = ref<number[]>([0, 0, 0, 0, 0])
 const celebrating = ref(false)
-/** 强制重挂载面板，避免回退时残留内部状态 */
 const panelEpoch = ref(0)
 const totalEarned = computed(() => segmentStars.value.reduce((a, b) => a + b, 0))
 
 const segment = computed<Segment | undefined>(() => lesson.value?.segments[segIdx.value])
+const canGoBack = computed(() => celebrating.value || segIdx.value > 0)
 
 const labels = ['👋', '📖', '🎵', '✋', '🌟']
 const labelNames = ['开场', '单词', '儿歌', '动手', '总结']
@@ -44,7 +42,6 @@ const labelNames = ['开场', '单词', '儿歌', '动手', '总结']
 onMounted(() => {
   if (!lesson.value) return
   stopAllPlayback()
-  // 断点续玩：只回到该环节，静默等待点击
   if (progress.resume?.lessonId === props.lessonId) {
     const i = Math.min(progress.resume.segmentIndex, lesson.value.segments.length - 1)
     segIdx.value = i
@@ -74,7 +71,6 @@ function onSegDone(stars: number) {
   panelEpoch.value++
 }
 
-/** 回退 / 跳到已到达的环节 */
 function jumpTo(i: number) {
   if (!lesson.value) return
   if (i < 0 || i > maxReached.value || i >= lesson.value.segments.length) {
@@ -89,25 +85,39 @@ function jumpTo(i: number) {
   panelEpoch.value++
 }
 
+/** 返回：回到本节前一个已学环节 */
+function goPrevSegment() {
+  if (celebrating.value) {
+    jumpTo(maxReached.value)
+    return
+  }
+  if (segIdx.value <= 0) {
+    playWrong()
+    return
+  }
+  jumpTo(segIdx.value - 1)
+}
+
 function goShowcase() {
   playClick()
   stopAllPlayback()
   router.push({ name: 'showcase', params: { lessonId: props.lessonId } })
 }
 
-function exit() {
-  playClick()
-  stopAllPlayback()
-  // 退出时保存当前环节，下次 Continue 从这里静默进入
-  if (lesson.value) progress.saveResume(props.lessonId, segIdx.value)
-  if (unit.value) router.push({ name: 'unit', params: { unitId: unit.value.id } })
-  else router.push({ name: 'home' })
-}
-
+/** 首页：保存进度并回主页 */
 function goHome() {
   playClick()
   stopAllPlayback()
+  if (lesson.value) progress.saveResume(props.lessonId, segIdx.value)
   router.push({ name: 'home' })
+}
+
+function goUnit() {
+  playClick()
+  stopAllPlayback()
+  if (lesson.value) progress.saveResume(props.lessonId, segIdx.value)
+  if (unit.value) router.push({ name: 'unit', params: { unitId: unit.value.id } })
+  else router.push({ name: 'home' })
 }
 
 function goRewards() {
@@ -120,7 +130,20 @@ function goRewards() {
 <template>
   <div v-if="lesson && level" class="page lesson" :class="`level-${level.id}`">
     <header class="bar">
-      <button class="back big-btn" type="button" aria-label="退出" @click="exit">⬅️</button>
+      <div class="nav-btns">
+        <button
+          class="nav-btn big-btn"
+          type="button"
+          aria-label="返回上一环节"
+          :disabled="!canGoBack"
+          @click="goPrevSegment"
+        >
+          ⬅️
+        </button>
+        <button class="nav-btn home big-btn" type="button" aria-label="回首页" @click="goHome">
+          🏠
+        </button>
+      </div>
       <div class="meta">
         <h1>Day {{ lesson.day }} · {{ resolve(lesson.title, 'en') }}</h1>
         <p class="parent-hint">{{ resolve(lesson.title, 'zh') }} · 约 {{ lesson.estimatedMinutes }} 分钟</p>
@@ -144,7 +167,7 @@ function goRewards() {
         </button>
       </div>
     </header>
-    <p class="parent-hint nav-hint">点上方圆点可回到已学过的环节；当前页点内容才播放对应音频</p>
+    <p class="parent-hint nav-hint">⬅️ 上一环节 · 🏠 首页 · 点喇叭听英文</p>
 
     <div v-if="!celebrating" class="body">
       <WarmupPanel
@@ -191,6 +214,7 @@ function goRewards() {
       <div class="row">
         <BigButton color="--level-color" @click="goHome">🏠 回家</BigButton>
         <BigButton @click="goRewards">🎁 贴纸</BigButton>
+        <BigButton v-if="unit" @click="goUnit">🗺️ 单元</BigButton>
         <BigButton v-if="lesson.showcase" color="--c-correct" @click="goShowcase">🎤 展示</BigButton>
       </div>
     </div>
@@ -214,10 +238,21 @@ function goRewards() {
   gap: 12px;
   flex-wrap: wrap;
 }
-.back {
-  min-width: 72px;
-  min-height: 72px;
-  font-size: 28px;
+.nav-btns {
+  display: flex;
+  gap: 8px;
+}
+.nav-btn {
+  min-width: 64px;
+  min-height: 64px;
+  font-size: 26px;
+}
+.nav-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.nav-btn.home {
+  background: #fff8e7;
 }
 .meta {
   flex: 1;
