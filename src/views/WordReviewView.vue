@@ -76,7 +76,8 @@ function back() {
     </header>
 
     <p class="parent-hint tip">
-      家长提示：宝宝自由点读已学单词属于「主动输出」，掌握度会提升；点读不记录失败，放心探索。
+      点词卡会先响一声轻「叮」，紧接着读英文。若本机语音异常会自动改用在线美音（需联网）。
+      点读属于「主动输出」，不记录失败。
     </p>
 
     <section v-for="g in groups" :key="g.key" class="group">

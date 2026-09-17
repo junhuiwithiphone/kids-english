@@ -3,7 +3,7 @@ import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useProgressStore } from '@/stores/progress'
 import { useSettingsStore, type MicMode } from '@/stores/settings'
-import { useSpeech } from '@/composables/useSpeech'
+import { useSpeech, speak, lastSpeakStatus } from '@/composables/useSpeech'
 import { playClick, playCorrect, playWrong } from '@/composables/useAudioFeedback'
 import { getScript } from '@/data/scripts'
 import { getLesson, allLessons } from '@/data/levels'
@@ -14,6 +14,29 @@ const router = useRouter()
 const progress = useProgressStore()
 const settings = useSettingsStore()
 const { voices, supported } = useSpeech()
+const ttsHint = ref('')
+
+async function testNative() {
+  playClick()
+  ttsHint.value = '正在用本机音色读 hello…'
+  await speak('hello', { interrupt: true })
+  const s = lastSpeakStatus.value
+  ttsHint.value =
+    s?.engine === 'native'
+      ? '✅ 本机英文发音正常'
+      : s?.engine === 'audio'
+        ? '⚠️ 本机 TTS 失败，已自动改用在线美音（也能听到英文）'
+        : '❌ 本机与在线发音都失败，请换 Chrome/Edge 并检查网络'
+}
+
+async function testAudio() {
+  playClick()
+  ttsHint.value = '正在用在线美音读 apple…'
+  await speak('apple', { forceAudio: true, interrupt: true })
+  const s = lastSpeakStatus.value
+  ttsHint.value =
+    s?.engine === 'audio' ? '✅ 在线美音正常（点读会走这个兜底）' : '❌ 在线美音失败，请检查网络是否能访问有道/百度'
+}
 
 const unlocked = ref(false)
 const a = ref(0)
@@ -219,15 +242,23 @@ function back() {
           </select>
         </label>
         <label class="field">
-          TTS 音色 {{ supported ? '' : '（本机不支持）' }}
+          TTS 音色 {{ supported ? `（检测到 ${voices.length} 个英语声线）` : '（本机不支持）' }}
           <select v-model="settings.voiceName" class="input">
             <option value="">自动优选美音</option>
             <option v-for="v in voices" :key="v.name" :value="v.name">{{ v.name }} ({{ v.lang }})</option>
           </select>
         </label>
+        <div class="row">
+          <BigButton @click="testNative">🔊 测试本机发音</BigButton>
+          <BigButton @click="testAudio">🌐 测试在线美音</BigButton>
+        </div>
+        <p v-if="ttsHint" class="parent-hint">{{ ttsHint }}</p>
+        <p class="parent-hint">
+          说明：点词卡时若本机不读英文，会自动改用在线美音。短促「叮」只是点击音效，英文应紧随其后。
+        </p>
         <label class="check">
           <input v-model="settings.soundOn" type="checkbox" />
-          音效开
+          点击音效开（与英文朗读独立）
         </label>
         <label class="check">
           <input v-model="settings.enforceLevelLock" type="checkbox" />

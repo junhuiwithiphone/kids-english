@@ -3,11 +3,10 @@ import type { Word } from '../data/schema'
 import { useSettingsStore } from '../stores/settings'
 
 /* ═══════════════════════════════════════════════════════════
-   TTS 语音层（Web Speech API）
-   Chrome/Edge 坑：
-   - cancel() 后立刻 speak() 会被丢掉
-   - Utterance 若无全局引用会被 GC，导致只有点击音、没有朗读
-   - speechSynthesis 会自己 pause，需定期 resume
+   发音引擎（双通道）
+   1) 优先 Web Speech API（本机音色）
+   2) 若未真正开声 / 报错 → 有道词典美音 MP3 兜底
+   这样即使用户「装了语言包但浏览器不读」，也能听到英文。
    ═══════════════════════════════════════════════════════════ */
 
 export type RateMode = 'slow' | 'normal' | 'chant'
@@ -15,9 +14,20 @@ export const RATE: Record<RateMode, number> = { slow: 0.7, normal: 0.85, chant: 
 
 export const speechSupported = typeof window !== 'undefined' && 'speechSynthesis' in window
 
+export type SpeakEngine = 'native' | 'audio' | 'none'
+
+/** 最近一次发音结果（家长诊断 / UI 提示） */
+export const lastSpeakStatus = ref<{
+  text: string
+  engine: SpeakEngine
+  error?: string
+  at: number
+} | null>(null)
+
 let unlockDone = false
 let speakGen = 0
 let heldUtterance: SpeechSynthesisUtterance | null = null
+let audioEl: HTMLAudioElement | null = null
 let resumeTimer: number | undefined
 let voicesReady: Promise<void> | null = null
 
@@ -40,7 +50,7 @@ function startResumeWatch() {
     } catch {
       /* */
     }
-  }, 5000)
+  }, 2500)
 }
 
 function waitForVoices(): Promise<void> {
@@ -48,22 +58,24 @@ function waitForVoices(): Promise<void> {
   if (speechSynthesis.getVoices().length) return Promise.resolve()
   if (voicesReady) return voicesReady
   voicesReady = new Promise((resolve) => {
+    let done = false
     const finish = () => {
+      if (done) return
+      done = true
       speechSynthesis.removeEventListener('voiceschanged', finish)
       resolve()
     }
     speechSynthesis.addEventListener('voiceschanged', finish)
-    // Chrome 首次 getVoices 常为空，再拉一次
     setTimeout(() => {
       speechSynthesis.getVoices()
       if (speechSynthesis.getVoices().length) finish()
     }, 50)
-    setTimeout(finish, 1200)
+    setTimeout(finish, 1500)
   })
   return voicesReady
 }
 
-/** 首次用户手势：只 resume / 预热声线，不要塞一句空朗读（会和第一次点读抢队列） */
+/** 首次手势：唤醒引擎 + 预拉声线列表 */
 export function unlockSpeech() {
   if (unlockDone || !speechSupported) return
   unlockDone = true
@@ -71,11 +83,10 @@ export function unlockSpeech() {
     speechSynthesis.resume()
     void waitForVoices()
   } catch {
-    /* 静默 */
+    /* */
   }
 }
 
-/** 美音 voice 优选链 */
 export function pickVoice(preferredName?: string): SpeechSynthesisVoice | null {
   if (!speechSupported) return null
   const voices = speechSynthesis.getVoices()
@@ -85,8 +96,9 @@ export function pickVoice(preferredName?: string): SpeechSynthesisVoice | null {
     if (v) return v
   }
   const enUS = voices.filter((v) => v.lang.replace('_', '-') === 'en-US')
-  const en = voices.filter((v) => v.lang.startsWith('en'))
-  const byName = (frag: string) => enUS.find((v) => v.name.includes(frag))
+  const en = voices.filter((v) => v.lang.toLowerCase().startsWith('en'))
+  const byName = (frag: string) =>
+    enUS.find((v) => v.name.includes(frag)) || en.find((v) => v.name.includes(frag))
   return (
     byName('Natural') ||
     byName('Google US English') ||
@@ -94,6 +106,7 @@ export function pickVoice(preferredName?: string): SpeechSynthesisVoice | null {
     byName('Aria') ||
     byName('Jenny') ||
     byName('Zira') ||
+    byName('David') ||
     enUS[0] ||
     en[0] ||
     null
@@ -105,12 +118,65 @@ export interface SpeakOptions {
   lang?: string
   interrupt?: boolean
   pitch?: number
+  /** 强制走在线音频（家长中心「测试有道」用） */
+  forceAudio?: boolean
 }
 
-function enqueue(text: string, opts: SpeakOptions, gen: number): Promise<void> {
+function stopAudio() {
+  if (audioEl) {
+    try {
+      audioEl.pause()
+      audioEl.removeAttribute('src')
+      audioEl.load()
+    } catch {
+      /* */
+    }
+    audioEl = null
+  }
+}
+
+/** 有道词典美音（type=2）；失败再试百度 TTS */
+function audioUrls(text: string): string[] {
+  const q = encodeURIComponent(text)
+  return [
+    `https://dict.youdao.com/dictvoice?audio=${q}&type=2`,
+    `https://fanyi.baidu.com/gettts?lan=en&text=${q}&spd=3&source=web`,
+  ]
+}
+
+function playAudioFallback(text: string): Promise<SpeakEngine> {
   return new Promise((resolve) => {
-    if (gen !== speakGen) {
-      resolve()
+    const urls = audioUrls(text)
+    let idx = 0
+
+    const tryNext = () => {
+      if (idx >= urls.length) {
+        lastSpeakStatus.value = { text, engine: 'none', error: 'audio-failed', at: Date.now() }
+        resolve('none')
+        return
+      }
+      stopAudio()
+      const el = new Audio()
+      audioEl = el
+      el.preload = 'auto'
+      el.src = urls[idx++]
+      const fail = () => tryNext()
+      el.onended = () => {
+        lastSpeakStatus.value = { text, engine: 'audio', at: Date.now() }
+        resolve('audio')
+      }
+      el.onerror = fail
+      void el.play().catch(fail)
+    }
+
+    tryNext()
+  })
+}
+
+function speakNative(text: string, opts: SpeakOptions, gen: number): Promise<'ok' | 'fail'> {
+  return new Promise((resolve) => {
+    if (!speechSupported || gen !== speakGen) {
+      resolve('fail')
       return
     }
     try {
@@ -119,78 +185,104 @@ function enqueue(text: string, opts: SpeakOptions, gen: number): Promise<void> {
       heldUtterance = u
       u.lang = opts.lang ?? 'en-US'
       u.rate = opts.rate ?? RATE.normal
-      u.pitch = opts.pitch ?? 1.15
+      u.pitch = opts.pitch ?? 1.1
       u.volume = 1
+
       let voiceName = ''
       try {
         voiceName = useSettingsStore().voiceName
       } catch {
-        /* pinia 未就绪 */
+        /* */
       }
       const v = pickVoice(voiceName)
       if (v) u.voice = v
 
+      let started = false
       let settled = false
-      const finish = () => {
+      const finish = (ok: boolean) => {
         if (settled) return
         settled = true
         stopResumeWatch()
         if (heldUtterance === u) heldUtterance = null
-        resolve()
+        resolve(ok ? 'ok' : 'fail')
       }
 
-      u.onstart = () => startResumeWatch()
-      u.onend = finish
-      u.onerror = finish
+      u.onstart = () => {
+        started = true
+        startResumeWatch()
+      }
+      u.onend = () => finish(started)
+      u.onerror = () => finish(false)
+
       speechSynthesis.speak(u)
 
-      // Chrome 吞句：200ms 内没开始就再送一次
+      // 400ms 内没 onstart → 视为浏览器吞了，交给音频兜底
       window.setTimeout(() => {
         if (gen !== speakGen || settled) return
-        if (!speechSynthesis.speaking && !speechSynthesis.pending) {
+        if (!started) {
           try {
-            speechSynthesis.resume()
-            speechSynthesis.speak(u)
+            speechSynthesis.cancel()
           } catch {
-            finish()
+            /* */
           }
+          finish(false)
         }
-      }, 200)
+      }, 400)
 
       window.setTimeout(() => {
-        if (!settled) finish()
-      }, Math.max(4000, text.length * 400))
+        if (!settled) finish(started)
+      }, Math.max(5000, text.length * 450))
     } catch {
-      resolve()
+      resolve('fail')
     }
   })
 }
 
-/** 朗读一句话；不支持 TTS 时静默 resolve */
+/** 朗读：本机 → 在线音频兜底 */
 export async function speak(text: string, opts: SpeakOptions = {}): Promise<void> {
-  if (!speechSupported || !text.trim()) return
+  const cleaned = text.trim()
+  if (!cleaned) return
   const gen = ++speakGen
+  stopAudio()
+
   try {
-    if (opts.interrupt !== false) {
+    if (opts.interrupt !== false && speechSupported) {
       speechSynthesis.cancel()
       stopResumeWatch()
-      // 必须等一拍，否则 Chrome 丢掉下一句
-      await delay(80)
+      await delay(60)
     }
+
+    if (opts.forceAudio || !speechSupported) {
+      if (gen !== speakGen) return
+      await playAudioFallback(cleaned)
+      return
+    }
+
     await waitForVoices()
     if (gen !== speakGen) return
-    await enqueue(text, opts, gen)
-  } catch {
-    /* 静默 */
+
+    const native = await speakNative(cleaned, opts, gen)
+    if (gen !== speakGen) return
+    if (native === 'ok') {
+      lastSpeakStatus.value = { text: cleaned, engine: 'native', at: Date.now() }
+      return
+    }
+
+    await playAudioFallback(cleaned)
+  } catch (e) {
+    lastSpeakStatus.value = {
+      text: cleaned,
+      engine: 'none',
+      error: String(e),
+      at: Date.now(),
+    }
   }
 }
 
-/** 朗读单词（默认慢速档；词可覆盖 ttsRate/audioText） */
 export function speakWord(word: Word, mode: RateMode = 'slow'): Promise<void> {
   return speak(word.audioText ?? word.en, { rate: word.ttsRate ?? RATE[mode] })
 }
 
-/** 顺序朗读多句 */
 export async function speakSequence(
   items: Array<{ text: string; rate?: number }>,
   gapMs = 350,
@@ -205,13 +297,20 @@ export function stopSpeech() {
   speakGen++
   stopResumeWatch()
   heldUtterance = null
+  stopAudio()
   if (speechSupported) {
     try {
       speechSynthesis.cancel()
     } catch {
-      /* 静默 */
+      /* */
     }
   }
+}
+
+/** 家长中心：列出本机英语声线 */
+export function listEnglishVoices(): SpeechSynthesisVoice[] {
+  if (!speechSupported) return []
+  return speechSynthesis.getVoices().filter((v) => v.lang.toLowerCase().startsWith('en'))
 }
 
 export function useSpeech() {
@@ -219,8 +318,7 @@ export function useSpeech() {
   const supported = ref(speechSupported)
 
   const refresh = () => {
-    if (!speechSupported) return
-    voices.value = speechSynthesis.getVoices().filter((v) => v.lang.startsWith('en'))
+    voices.value = listEnglishVoices()
   }
 
   onMounted(() => {
@@ -234,5 +332,13 @@ export function useSpeech() {
     if (speechSupported) speechSynthesis.removeEventListener('voiceschanged', refresh)
   })
 
-  return { supported, voices, speak, speakWord, stop: stopSpeech, RATE }
+  return {
+    supported,
+    voices,
+    speak,
+    speakWord,
+    stop: stopSpeech,
+    RATE,
+    lastSpeakStatus,
+  }
 }
