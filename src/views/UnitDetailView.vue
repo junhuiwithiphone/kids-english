@@ -231,7 +231,6 @@ function back() {
 .song-chip.playing {
   background: var(--level-color);
   color: #fff;
-  animation: breathe 1.6s ease-in-out infinite;
 }
 .song-hint {
   margin: 10px 0 0;

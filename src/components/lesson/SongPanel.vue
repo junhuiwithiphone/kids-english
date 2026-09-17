@@ -154,7 +154,6 @@ h2 {
 }
 .lyric.on {
   opacity: 1;
-  transform: scale(1.02);
 }
 .en {
   font-size: 20px;
