@@ -3,10 +3,9 @@ import type { Word } from '../data/schema'
 import { useSettingsStore } from '../stores/settings'
 
 /* ═══════════════════════════════════════════════════════════
-   发音引擎（双通道）
-   1) 优先 Web Speech API（本机音色）
-   2) 若未真正开声 / 报错 → 有道词典美音 MP3 兜底
-   这样即使用户「装了语言包但浏览器不读」，也能听到英文。
+   发音引擎
+   1) 本机 Web Speech（离线）
+   2) 有道词典美音（单词可靠；整句常失败 → 自动拆词连播）
    ═══════════════════════════════════════════════════════════ */
 
 export type RateMode = 'slow' | 'normal' | 'chant'
@@ -82,6 +81,11 @@ export function unlockSpeech() {
   try {
     speechSynthesis.resume()
     void waitForVoices()
+    // 空 utterance 预热，降低首次被吞的概率
+    const warm = new SpeechSynthesisUtterance(' ')
+    warm.volume = 0
+    speechSynthesis.speak(warm)
+    speechSynthesis.cancel()
   } catch {
     /* */
   }
@@ -107,6 +111,7 @@ export function pickVoice(preferredName?: string): SpeechSynthesisVoice | null {
     byName('Jenny') ||
     byName('Zira') ||
     byName('David') ||
+    byName('Mark') ||
     enUS[0] ||
     en[0] ||
     null
@@ -135,61 +140,73 @@ function stopAudio() {
   }
 }
 
-/** 在线美音：短词走词典，整句再走 TTS；多源兜底 */
-function audioUrls(text: string): string[] {
-  const q = encodeURIComponent(text)
-  return [
-    `https://dict.youdao.com/dictvoice?audio=${q}&type=2`,
-    `https://translate.googleapis.com/translate_tts?ie=UTF-8&client=gtx&tl=en&q=${q}`,
-    `https://fanyi.baidu.com/gettts?lan=en&text=${q}&spd=3&source=web`,
-  ]
+/** 有道词典美音（单词级稳定；整句常 404/解码失败） */
+function youdaoUrl(text: string): string {
+  return `https://dict.youdao.com/dictvoice?audio=${encodeURIComponent(text)}&type=2`
 }
 
-function playAudioFallback(text: string): Promise<SpeakEngine> {
-  return new Promise((resolve) => {
-    const urls = audioUrls(text)
-    let idx = 0
-    let settled = false
-    let watchdog: number | undefined
+function tokenizeEnglish(text: string): string[] {
+  return text
+    .replace(/[^a-zA-Z0-9'-]+/g, ' ')
+    .split(/\s+/)
+    .map((w) => w.trim())
+    .filter((w) => w.length > 0)
+}
 
-    const done = (engine: SpeakEngine) => {
+function playOneAudio(url: string, gen: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    if (gen !== speakGen) {
+      resolve(false)
+      return
+    }
+    stopAudio()
+    const el = new Audio()
+    audioEl = el
+    el.preload = 'auto'
+    el.src = url
+    let settled = false
+    const finish = (ok: boolean) => {
       if (settled) return
       settled = true
-      if (watchdog !== undefined) window.clearTimeout(watchdog)
-      if (engine === 'none') {
-        lastSpeakStatus.value = { text, engine: 'none', error: 'audio-failed', at: Date.now() }
-      } else {
-        lastSpeakStatus.value = { text, engine, at: Date.now() }
-      }
-      resolve(engine)
+      window.clearTimeout(watchdog)
+      resolve(ok)
     }
-
-    const tryNext = () => {
-      if (settled) return
-      if (idx >= urls.length) {
-        done('none')
-        return
-      }
-      stopAudio()
-      const el = new Audio()
-      audioEl = el
-      el.preload = 'auto'
-      const url = urls[idx++]
-      el.src = url
-      const fail = () => {
-        if (settled) return
-        tryNext()
-      }
-      el.onended = () => done('audio')
-      el.onerror = fail
-      // 单个源卡住太久就换下一个
-      if (watchdog !== undefined) window.clearTimeout(watchdog)
-      watchdog = window.setTimeout(fail, 2500)
-      void el.play().catch(fail)
-    }
-
-    tryNext()
+    const watchdog = window.setTimeout(() => finish(false), 2800)
+    el.onended = () => finish(true)
+    el.onerror = () => finish(false)
+    void el.play().catch(() => finish(false))
   })
+}
+
+/** 整句失败时，按词连播有道美音（已验证可用） */
+async function playAudioWordByWord(text: string, gen: number): Promise<SpeakEngine> {
+  const words = tokenizeEnglish(text)
+  if (!words.length) return 'none'
+  for (const w of words) {
+    if (gen !== speakGen) return 'none'
+    const ok = await playOneAudio(youdaoUrl(w), gen)
+    if (!ok) return 'none'
+    await delay(80)
+  }
+  return 'audio'
+}
+
+async function playAudioFallback(text: string, gen: number): Promise<SpeakEngine> {
+  // 1) 整句试一次（短词/短语偶发可用）
+  if (await playOneAudio(youdaoUrl(text), gen)) {
+    lastSpeakStatus.value = { text, engine: 'audio', at: Date.now() }
+    return 'audio'
+  }
+  // 2) 含空格 → 拆词连播
+  if (/\s/.test(text)) {
+    const engine = await playAudioWordByWord(text, gen)
+    if (engine === 'audio') {
+      lastSpeakStatus.value = { text, engine: 'audio', at: Date.now() }
+      return 'audio'
+    }
+  }
+  lastSpeakStatus.value = { text, engine: 'none', error: 'audio-failed', at: Date.now() }
+  return 'none'
 }
 
 function speakNative(text: string, opts: SpeakOptions, gen: number): Promise<'ok' | 'fail'> {
@@ -235,7 +252,6 @@ function speakNative(text: string, opts: SpeakOptions, gen: number): Promise<'ok
 
       speechSynthesis.speak(u)
 
-      // 句长时给更多时间等 onstart；仍无则交给在线兜底
       window.setTimeout(() => {
         if (gen !== speakGen || settled) return
         if (!started) {
@@ -257,7 +273,12 @@ function speakNative(text: string, opts: SpeakOptions, gen: number): Promise<'ok
   })
 }
 
-/** 朗读：本机 TTS 优先（离线可用），失败再试在线美音 */
+/**
+ * 朗读策略：
+ * - 默认：在线拆词美音优先（国内稳定、有声），失败再本机
+ * - forceAudio：只测在线
+ * 原因：Windows 上本机常「onstart 却无声」；有道整句失败但单词可用。
+ */
 export async function speak(text: string, opts: SpeakOptions = {}): Promise<void> {
   const cleaned = text.trim()
   if (!cleaned) return
@@ -269,18 +290,23 @@ export async function speak(text: string, opts: SpeakOptions = {}): Promise<void
     if (opts.interrupt !== false && speechSupported) {
       speechSynthesis.cancel()
       stopResumeWatch()
-      // cancel 后立刻 speak 会被 Chrome/Edge 吞掉
-      await delay(150)
+      await delay(120)
     }
 
-    // 家长中心「强制在线」才跳过本机
-    if (opts.forceAudio || !speechSupported) {
+    if (gen !== speakGen) return
+
+    // 在线优先（单词/拆词）；家长测本机时不要 forceAudio
+    if (!opts.forceAudio) {
+      const online = await playAudioFallback(cleaned, gen)
       if (gen !== speakGen) return
-      const engine = await playAudioFallback(cleaned)
-      if (engine !== 'none' || !speechSupported) return
-      // 在线失败 → 继续本机
+      if (online === 'audio') return
+    } else {
+      await playAudioFallback(cleaned, gen)
+      return
     }
 
+    // 在线失败 → 本机
+    if (!speechSupported) return
     await waitForVoices()
     if (gen !== speakGen) return
 
@@ -291,8 +317,12 @@ export async function speak(text: string, opts: SpeakOptions = {}): Promise<void
       return
     }
 
-    // 本机未真正开声 → 在线兜底（失败也不再报死，由调用方看 status）
-    if (!opts.forceAudio) await playAudioFallback(cleaned)
+    lastSpeakStatus.value = {
+      text: cleaned,
+      engine: 'none',
+      error: 'native-and-audio-failed',
+      at: Date.now(),
+    }
   } catch (e) {
     lastSpeakStatus.value = {
       text: cleaned,
