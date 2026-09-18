@@ -149,24 +149,42 @@ function playAudioFallback(text: string): Promise<SpeakEngine> {
   return new Promise((resolve) => {
     const urls = audioUrls(text)
     let idx = 0
+    let settled = false
+    let watchdog: number | undefined
+
+    const done = (engine: SpeakEngine) => {
+      if (settled) return
+      settled = true
+      if (watchdog !== undefined) window.clearTimeout(watchdog)
+      if (engine === 'none') {
+        lastSpeakStatus.value = { text, engine: 'none', error: 'audio-failed', at: Date.now() }
+      } else {
+        lastSpeakStatus.value = { text, engine, at: Date.now() }
+      }
+      resolve(engine)
+    }
 
     const tryNext = () => {
+      if (settled) return
       if (idx >= urls.length) {
-        lastSpeakStatus.value = { text, engine: 'none', error: 'audio-failed', at: Date.now() }
-        resolve('none')
+        done('none')
         return
       }
       stopAudio()
       const el = new Audio()
       audioEl = el
       el.preload = 'auto'
-      el.src = urls[idx++]
-      const fail = () => tryNext()
-      el.onended = () => {
-        lastSpeakStatus.value = { text, engine: 'audio', at: Date.now() }
-        resolve('audio')
+      const url = urls[idx++]
+      el.src = url
+      const fail = () => {
+        if (settled) return
+        tryNext()
       }
+      el.onended = () => done('audio')
       el.onerror = fail
+      // 单个源卡住太久就换下一个
+      if (watchdog !== undefined) window.clearTimeout(watchdog)
+      watchdog = window.setTimeout(fail, 2500)
       void el.play().catch(fail)
     }
 
@@ -217,7 +235,7 @@ function speakNative(text: string, opts: SpeakOptions, gen: number): Promise<'ok
 
       speechSynthesis.speak(u)
 
-      // 400ms 内没 onstart → 视为浏览器吞了，交给音频兜底
+      // 句长时给更多时间等 onstart；仍无则交给在线兜底
       window.setTimeout(() => {
         if (gen !== speakGen || settled) return
         if (!started) {
@@ -228,7 +246,7 @@ function speakNative(text: string, opts: SpeakOptions, gen: number): Promise<'ok
           }
           finish(false)
         }
-      }, 400)
+      }, Math.min(1200, 450 + text.length * 20))
 
       window.setTimeout(() => {
         if (!settled) finish(started)
@@ -239,7 +257,7 @@ function speakNative(text: string, opts: SpeakOptions, gen: number): Promise<'ok
   })
 }
 
-/** 朗读：本机 → 在线音频兜底（整句默认更信任在线，避免 Windows 静默 TTS） */
+/** 朗读：本机 TTS 优先（离线可用），失败再试在线美音 */
 export async function speak(text: string, opts: SpeakOptions = {}): Promise<void> {
   const cleaned = text.trim()
   if (!cleaned) return
@@ -247,22 +265,20 @@ export async function speak(text: string, opts: SpeakOptions = {}): Promise<void
   const gen = ++speakGen
   stopAudio()
 
-  // 含空格的短语/句子：本机常「有 onstart 却无声」，优先在线
-  const preferAudio = opts.forceAudio || cleaned.includes(' ')
-
   try {
     if (opts.interrupt !== false && speechSupported) {
       speechSynthesis.cancel()
       stopResumeWatch()
       // cancel 后立刻 speak 会被 Chrome/Edge 吞掉
-      await delay(120)
+      await delay(150)
     }
 
-    if (preferAudio || !speechSupported) {
+    // 家长中心「强制在线」才跳过本机
+    if (opts.forceAudio || !speechSupported) {
       if (gen !== speakGen) return
       const engine = await playAudioFallback(cleaned)
-      if (engine !== 'none' || preferAudio) return
-      // 在线全失败再试本机
+      if (engine !== 'none' || !speechSupported) return
+      // 在线失败 → 继续本机
     }
 
     await waitForVoices()
@@ -275,7 +291,8 @@ export async function speak(text: string, opts: SpeakOptions = {}): Promise<void
       return
     }
 
-    if (!preferAudio) await playAudioFallback(cleaned)
+    // 本机未真正开声 → 在线兜底（失败也不再报死，由调用方看 status）
+    if (!opts.forceAudio) await playAudioFallback(cleaned)
   } catch (e) {
     lastSpeakStatus.value = {
       text: cleaned,

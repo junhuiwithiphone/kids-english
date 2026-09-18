@@ -39,8 +39,8 @@ async function readStep(i: number) {
   speaking.value = true
   speakFail.value = false
 
-  // 交给 speak 内部 interrupt，不要先 stopSpeech（会抬 gen 导致竞态静音）
-  await speak(s.text, { interrupt: true, forceAudio: true })
+  // 本机优先；在线仅作兜底（国内访问有道/Google 常被拦）
+  await speak(s.text, { interrupt: true })
 
   if (token !== speakToken) return
   speaking.value = false
@@ -79,7 +79,7 @@ function goShowcase() {
     <p class="guide parent-hint">{{ segment.activity.parentGuideZh }}</p>
 
     <p class="parent-hint tip">点喇叭听这一句英文</p>
-    <p v-if="speakFail" class="parent-hint fail">暂时没声音，请检查网络后重试</p>
+    <p v-if="speakFail" class="parent-hint fail">没听到声音？可到「家长中心」测一下发音</p>
     <ol class="steps">
       <li
         v-for="(s, i) in segment.activity.steps"
