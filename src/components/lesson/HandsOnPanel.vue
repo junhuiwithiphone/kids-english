@@ -79,7 +79,7 @@ function goShowcase() {
     <p class="guide parent-hint">{{ segment.activity.parentGuideZh }}</p>
 
     <p class="parent-hint tip">点喇叭听这一句英文</p>
-    <p v-if="speakFail" class="parent-hint fail">没听到声音？可到「家长中心」测一下发音</p>
+    <p v-if="speakFail" class="parent-hint fail">本机朗读失败，请到「家长中心」选一个英语声线后再试</p>
     <ol class="steps">
       <li
         v-for="(s, i) in segment.activity.steps"
